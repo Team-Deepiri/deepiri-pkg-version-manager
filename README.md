@@ -1,6 +1,6 @@
 # Deepiri Package Version Manager
 
-Dependency graph and version management tool for Deepiri platform.
+Dependency graph and version management tool for Deepiri 
 
 ## Installation
 

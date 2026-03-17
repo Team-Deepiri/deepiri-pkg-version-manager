@@ -1,0 +1,197 @@
+.DS_Store
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+ENV/
+env/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.mypy_cache/
+.ruff_cache/
+*.db
+# Elomix Nexus - Git Ignore
+
+# ========================================
+# SECRETS & ENVIRONMENT FILES
+# ========================================
+.env
+.env.*
+!.env.example
+!.env.example.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+!env.example*
+!*env.example*
+
+# API Keys & Certificates
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.jks
+*.keystore
+*.pfx
+
+# ========================================
+# PYTHON
+# ========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+
+# ========================================
+# LOGS
+# ========================================
+*.log
+.log
+.logs
+logs/
+*.log.*
+
+# ========================================
+# ML MODELS & DATA
+# ========================================
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.pb
+*.onnx
+*.pkl
+*.pickle
+*.model
+*.tflite
+*.hdf5
+models/
+checkpoints/
+saved_models/
+trained_models/
+model_cache/
+.cache/
+.huggingface/
+.transformers_cache/
+*.parquet
+*.arrow
+*.feather
+
+# Training data
+app/train/data/
+**/data/
+*.jsonl
+synthetic_*.jsonl
+
+# ========================================
+# DATABASES
+# ========================================
+*.db
+*.sqlite
+*.sqlite3
+chroma_db/
+*.chroma
+
+# ========================================
+# OS & EDITOR
+# ========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.iml
+
+# ========================================
+# AI & DEVELOPMENT TOOLS
+# ========================================
+.ai-commit/
+.cursor/
+.copilot/
+.claude/
+*.ai-commit
+.cursorrules
+.cursorignore
+
+# ========================================
+# DOCKER
+# ========================================
+.dockerignore
+
+# ========================================
+# TEMPORARY FILES
+# ========================================
+*.tmp
+*.temp
+.temp/
+temp/
+*.cache
+.cache/
+
+# ========================================
+# TESTING
+# ========================================
+.coverage
+coverage/
+.nyc_output
+htmlcov/
+.pytest_cache/
+.tox/
+
+# ========================================
+# JUPYTER NOTEBOOKS
+# ========================================
+.ipynb_checkpoints
+*.ipynb
+
+# ========================================
+# MISC
+# ========================================
+*.bak
+*.backup
+*.orig

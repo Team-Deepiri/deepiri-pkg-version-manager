@@ -1,0 +1,6 @@
+[
+  {"name": "core", "description": "Core dependency", "color": "#ff0000"},
+  {"name": "shared", "description": "Shared across services", "color": "#00ff00"},
+  {"name": "infra", "description": "Infrastructure package", "color": "#0000ff"},
+  {"name": "ai", "description": "AI/ML related", "color": "#ff00ff"}
+]

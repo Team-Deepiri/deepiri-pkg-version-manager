@@ -367,7 +367,12 @@ def tag_add(
         rprint(f"[red]Error:[/red] Failed to add tag")
 
 def run_git_command(command: str, cwd: str) -> str:
-    pass
+    try:
+        process = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+        return process.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        rprint(f"[red]Error:[/red] {e}")
+        return None
 
 @tag_app.command("push")
 def tag_push(
@@ -401,7 +406,12 @@ def tag_push(
         rprint(f"[green]Tag '{tag_name}' exists in dependency '{dependency}'[/green]")
 
     dep_path = dep.repo_path
-    print(dep_path)
+    output = run_git_command(['git', 'push', 'origin', tag_name], dep_path)
+    if output is None:
+        rprint(f"[red]Error:[/red] Failed to push tag '{tag_name}' to '{dependency}'")
+        raise typer.Exit(1)
+    else:
+        rprint(f"[green]Pushed tag '{tag_name}' to '{dependency}'[/green]")
 
 @tag_app.command("remove")
 def tag_remove(

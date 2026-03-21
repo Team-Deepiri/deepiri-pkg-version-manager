@@ -1,5 +1,6 @@
 import json
 import typer
+import subprocess
 from typing import Optional, List
 import subprocess
 from pathlib import Path
@@ -365,6 +366,42 @@ def tag_add(
     else:
         rprint(f"[red]Error:[/red] Failed to add tag")
 
+def run_git_command(command: str, cwd: str) -> str:
+    pass
+
+@tag_app.command("push")
+def tag_push(
+    dependency: str = typer.Argument(..., help="Dependency name"),
+    tag_name: str = typer.Argument(..., help="Tag name"),
+    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
+    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+):
+    """Push a tag to a dependency."""
+    tag_mgr = TagManager()
+    registry = DependencyRegistry()
+
+    dep = registry.get(dependency)
+    if not dep:
+        rprint(f"[red]Error:[/red] Dependency '{dependency}' not found")
+        raise typer.Exit(1)
+
+    if not dep.is_submodule:
+        rprint(f"[red]Error:[/red] Dependency '{dependency}' is not a submodule, cannot push tag")
+        raise typer.Exit(1)
+
+    if dep.git_tag == dep.git_tag:
+        rprint(f"[green]Tag '{tag_name}' is already exists in '{dependency}'[/green]")
+        raise typer.Exit(1)
+    
+    exists = tag_mgr.check_tag_exists_in_dependency(dependency, tag_name)
+    if not exists:
+        rprint(f"[red]Error:[/red] Tag '{tag_name}' not found in dependency '{dependency}'")
+        raise typer.Exit(1)
+    else:
+        rprint(f"[green]Tag '{tag_name}' exists in dependency '{dependency}'[/green]")
+
+    dep_path = dep.repo_path
+    print(dep_path)
 
 @tag_app.command("remove")
 def tag_remove(

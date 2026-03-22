@@ -1,4 +1,5 @@
 import json
+from numpy import False_
 import typer
 import subprocess
 from typing import Optional, List
@@ -349,6 +350,18 @@ def run_git_command(command: str, cwd: str) -> str:
         rprint(f"[red]Error:[/red] {e}")
         return None
 
+def clean_working_tree(dep_path: str) -> bool:
+    clean = run_git_command(['git', 'status', '--porcelain'], dep_path)
+    if clean is None:
+        rprint(f"[red]Error:[/red] Failed to check if working tree is clean")
+        return False
+    elif clean.strip() != '':
+        rprint(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
+        return False_
+    else:
+        rprint(f"[green]Working tree is clean[/green]")
+        return True
+
 @tag_app.command("add")
 def tag_add(
     dependency: str = typer.Argument(..., help="Dependency name"),
@@ -363,6 +376,10 @@ def tag_add(
     dep = registry.get(dependency)
     if not dep:
         rprint(f"[red]Error:[/red] Dependency '{dependency}' not found")
+        raise typer.Exit(1)
+
+    dep_path = dep.repo_path
+    if not clean_working_tree(dep_path):
         raise typer.Exit(1)
     
     tag_mgr.create_tag(name=tag_name, description=description, color=color)
@@ -387,21 +404,18 @@ def tag_add(
 @tag_app.command("push")
 def tag_push(
     dependency: str = typer.Argument(..., help="Dependency name"),
-    tag_name: str = typer.Argument(..., help="Tag name"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
-    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+    tag_name: str = typer.Argument(..., help="Tag name")
 ):
     """Push a tag to a dependency."""
     tag_mgr = TagManager()
     registry = DependencyRegistry()
 
     dep = registry.get(dependency)
-    dep_path = dep.repo_path
-
     if not dep:
         rprint(f"[red]Error:[/red] Dependency '{dependency}' not found")
         raise typer.Exit(1)
-
+    
+    dep_path = dep.repo_path
     is_repo = run_git_command(['git', 'rev-parse', '--is-inside-work-tree'], dep_path)
     if is_repo is None or is_repo != 'true':
         rprint(f"[red]Error:[/red] Dependency '{dependency}' is not a submodule or repository, cannot push tag")
@@ -418,15 +432,18 @@ def tag_push(
     else:
         rprint(f"[green]Tag '{tag_name}' exists in dependency '{dependency}'[/green]")
 
-    clean = run_git_command(['git', 'status', '--porcelain'], dep_path)
-    if clean is None:
-        rprint(f"[red]Error:[/red] Failed to check if working tree is clean")
+    exists_remotely = run_git_command(['git', 'ls-remote', '--tags', 'origin', tag_name], dep_path)
+    if not exists_remotely:
+        rprint(f"[red]Error:[/red] Checking if '{tag_name}' exists remotely in '{dependency}'")
         raise typer.Exit(1)
-    elif clean.strip() != '':
-        rprint(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
+    elif exists_remotely.strip() == "":
+        rprint(f"[red]Error:[/red] '{tag_name}' does not exist remotely in '{dependency}'")
         raise typer.Exit(1)
     else:
-        rprint(f"[green]Working tree is clean[/green]")
+        rprint(f"[green]Tag '{tag_name}' exists remotely in '{dependency}'[/green]")
+
+    if not clean_working_tree(dep_path):
+        raise typer.Exit(1)
 
     output = run_git_command(['git', 'push', 'origin', tag_name], dep_path)
     if output is None:
@@ -436,8 +453,35 @@ def tag_push(
         rprint(f"[green]Pushed tag '{tag_name}' to '{dependency}'[/green]")
 
     if dep.is_submodule:
-        output = run_git_command(['git', 'push'], dep_path)
+        """Update repo dependency root if dependency is a submodule"""
+        checkout = run_git_command(['git', 'checkout', tag_name], dep_path)
+        if checkout is None:
+            rprint(f"[red]Error:[/red] Failed to checkout tag '{tag_name}' in '{dependency}'")
+            raise typer.Exit(1)
+        else:
+            rprint(f"[green]Checked out tag '{tag_name}' in '{dependency}'[/green]")
+
+        main_path = Path(__file__).parent.parent / "deepiri-platform"
+        add = run_git_command(['git', 'add', dep_path], main_path)
+        if add is None:
+            rprint(f"[red]Error:[/red] Failed to add changes in '{dependency}'")
+            raise typer.Exit(1)
+        else:
+            rprint(f"[green]Added changes in '{dependency}' to main repository[/green]")
         
+        commit = run_git_command(['git', 'commit', '-m', f"Update dependency '{dependency}' to tag '{tag_name}'"], main_path)
+        if commit is None:
+            rprint(f"[red]Error:[/red] Failed to commit changes in '{dependency}'")
+            raise typer.Exit(1)
+        else:
+            rprint(f"[green]Committed changes in '{dependency}' to main repository[/green]")
+        
+        push = run_git_command(['git', 'push', 'origin', 'HEAD'], main_path)
+        if push is None:
+            rprint(f"[red]Error:[/red] Failed to push new version '{tag_name}' in '{dependency}' to main repository")
+            raise typer.Exit(1)
+        else:
+            rprint(f"[green]Pushed new version '{tag_name}' in '{dependency}' to main repository[/green]")
 
 @tag_app.command("remove")
 def tag_remove(

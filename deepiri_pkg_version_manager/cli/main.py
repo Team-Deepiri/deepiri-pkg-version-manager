@@ -1,5 +1,4 @@
 import json
-from numpy import False_
 import typer
 import subprocess
 from typing import Optional, List
@@ -342,6 +341,7 @@ def export(
     else:
         console.print(output_str)
 
+
 def run_git_command(command: str, cwd: str) -> str:
     try:
         process = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
@@ -349,6 +349,7 @@ def run_git_command(command: str, cwd: str) -> str:
     except subprocess.CalledProcessError as e:
         rprint(f"[red]Error:[/red] {e}")
         return None
+
 
 def clean_working_tree(dep_path: str) -> bool:
     clean = run_git_command(['git', 'status', '--porcelain'], dep_path)
@@ -361,6 +362,7 @@ def clean_working_tree(dep_path: str) -> bool:
     else:
         rprint(f"[green]Working tree is clean[/green]")
         return True
+
 
 @tag_app.command("add")
 def tag_add(
@@ -384,9 +386,8 @@ def tag_add(
     
     tag_mgr.create_tag(name=tag_name, description=description, color=color)
     success = tag_mgr.add_tag_to_dependency(dependency, tag_name)
-    
     if success:
-        rprint(f"[green]Added tag '{tag_name}' to '{dependency}'[/green]")
+        rprint(f"[green]Added tag '{tag_name}' to '{dependency}' in db[/green]")
     else:
         rprint(f"[red]Error:[/red] Failed to add tag")
 
@@ -398,7 +399,7 @@ def tag_add(
     if output is None:
         rprint(f"[red]Error:[/red] Failed to create tag '{tag_name} in {dependency}'")
     else:
-        rprint(f"[green]Created tag '{tag_name}' in '{dependency}'[/green]")
+        rprint(f"[green]Created tag '{tag_name}' in '{dependency}' locally[/green]")
 
 
 @tag_app.command("push")
@@ -439,7 +440,7 @@ def tag_push(
         rprint(f"[green]Tag '{tag_name}' exists locally in '{dependency}'[/green]")
 
     exists_remotely = run_git_command(['git', 'ls-remote', '--tags', 'origin', tag_name], dep_path)
-    if not exists_remotely:
+    if exists_remotely is None:
         rprint(f"[red]Error:[/red] Checking if '{tag_name}' exists remotely in '{dependency}'")
         raise typer.Exit(1)
     elif exists_remotely.strip() != "":
@@ -486,6 +487,7 @@ def tag_push(
         else:
             rprint(f"[green]Pushed new version '{tag_name}' in '{dependency}' to main repository[/green]")
 
+
 @tag_app.command("remove")
 def tag_remove(
     dependency: str = typer.Argument(..., help="Dependency name"),
@@ -493,12 +495,45 @@ def tag_remove(
 ):
     """Remove a tag from a dependency."""
     tag_mgr = TagManager()
+    registry = DependencyRegistry()
+
+    dep = registry.get(dependency)
+    if not dep:
+        rprint(f"[red]Error:[/red] Dependency '{dependency}' not found")
+        raise typer.Exit(1)
+
+    dep_path = dep.repo_path
+    if not clean_working_tree(dep_path):
+        raise typer.Exit(1)
+
     success = tag_mgr.remove_tag_from_dependency(dependency, tag_name)
-    
     if success:
-        rprint(f"[green]Removed tag '{tag_name}' from '{dependency}'[/green]")
+        rprint(f"[green]Removed tag '{tag_name}' from '{dependency}' in db[/green]")
     else:
         rprint(f"[red]Error:[/red] Tag or dependency not found")
+        raise typer.Exit(1)
+
+    remove_locally = run_git_command(['git', 'tag', '-d', tag_name], dep_path)
+    if remove_locally is None:
+        rprint(f"[red]Error:[/red] Failed to remove tag '{tag_name}' from '{dependency}'")
+        raise typer.Exit(1)
+    else:
+        rprint(f"[green]Removed tag '{tag_name}' from '{dependency}' locally[/green]")
+    
+    check_remote = run_git_command(['git', 'ls-remote', '--tags', 'origin', tag_name], dep_path)
+    if check_remote is None:
+        rprint(f"[red]Error:[/red] Failed to check if tag '{tag_name}' exists remotely in '{dependency}'")
+        raise typer.Exit(1)
+    elif check_remote.strip() != "":
+        delete = run_git_command(['git', 'push', 'origin', '--delete', tag_name], dep_path)
+        if delete is None:
+            rprint(f"[red]Error:[/red] Failed to delete tag '{tag_name}' from '{dependency}'")
+            raise typer.Exit(1)
+        else:
+            rprint(f"[green]Deleted tag '{tag_name}' from '{dependency}'[/green]")
+    else:
+        rprint(f"[green]Tag '{tag_name}' does not exist remotely in '{dependency}'[/green]")
+
 
 
 @tag_app.command("list")

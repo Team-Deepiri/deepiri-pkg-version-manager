@@ -15,5 +15,7 @@ dtm scan --path ../deepiri-platform
 dtm deps
 dtm graph
 dtm install <package>
-dtm tag add <package> <tag>
+dtm tag add <package> <tag> -d "<description>"
+dtm tag push <package> <tag>
+dtm tag remove <package> <tag>
 ```

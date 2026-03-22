@@ -357,7 +357,7 @@ def clean_working_tree(dep_path: str) -> bool:
         return False
     elif clean.strip() != '':
         rprint(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
-        return False_
+        return False
     else:
         rprint(f"[green]Working tree is clean[/green]")
         return True
@@ -421,29 +421,32 @@ def tag_push(
         rprint(f"[red]Error:[/red] Dependency '{dependency}' is not a submodule or repository, cannot push tag")
         raise typer.Exit(1)
 
-    if tag_name == dep.git_tag:
-        rprint(f"[red]Error:[/red] Tag '{tag_name}' already exists in '{dependency}'")
+    if not clean_working_tree(dep_path):
         raise typer.Exit(1)
     
-    exists = tag_mgr.check_tag_exists_in_dependency(dependency, tag_name)
-    if not exists:
+    exists_in_db = tag_mgr.check_tag_exists_in_dependency(dependency, tag_name)
+    if not exists_in_db:
         rprint(f"[red]Error:[/red] Tag '{tag_name}' not found in dependency '{dependency}'")
         raise typer.Exit(1)
     else:
         rprint(f"[green]Tag '{tag_name}' exists in dependency '{dependency}'[/green]")
 
+    exists_locally = run_git_command(['git', 'tag', '--list', tag_name], dep_path)
+    if exists_locally is None or exists_locally.strip() == "":
+        rprint(f"[red]Error:[/red] Tag '{tag_name}' not found locally in '{dependency}'")
+        raise typer.Exit(1)
+    else:
+        rprint(f"[green]Tag '{tag_name}' exists locally in '{dependency}'[/green]")
+
     exists_remotely = run_git_command(['git', 'ls-remote', '--tags', 'origin', tag_name], dep_path)
     if not exists_remotely:
         rprint(f"[red]Error:[/red] Checking if '{tag_name}' exists remotely in '{dependency}'")
         raise typer.Exit(1)
-    elif exists_remotely.strip() == "":
-        rprint(f"[red]Error:[/red] '{tag_name}' does not exist remotely in '{dependency}'")
+    elif exists_remotely.strip() != "":
+        rprint(f"[red]Error:[/red] Tag '{tag_name}' already exists remotely in '{dependency}'")
         raise typer.Exit(1)
     else:
-        rprint(f"[green]Tag '{tag_name}' exists remotely in '{dependency}'[/green]")
-
-    if not clean_working_tree(dep_path):
-        raise typer.Exit(1)
+        rprint(f"[green]Tag '{tag_name}' does not exist remotely in '{dependency}' - safe to push[/green]")
 
     output = run_git_command(['git', 'push', 'origin', tag_name], dep_path)
     if output is None:
@@ -453,7 +456,7 @@ def tag_push(
         rprint(f"[green]Pushed tag '{tag_name}' to '{dependency}'[/green]")
 
     if dep.is_submodule:
-        """Update repo dependency root if dependency is a submodule"""
+        """Update dependency root if dependency is a submodule"""
         checkout = run_git_command(['git', 'checkout', tag_name], dep_path)
         if checkout is None:
             rprint(f"[red]Error:[/red] Failed to checkout tag '{tag_name}' in '{dependency}'")

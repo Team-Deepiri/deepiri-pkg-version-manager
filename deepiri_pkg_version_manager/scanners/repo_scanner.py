@@ -2,11 +2,16 @@ import json
 import re
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional, Literal
 from dataclasses import dataclass, field
 from rich.console import Console
-import tomli as tomllib
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 console = Console()
 

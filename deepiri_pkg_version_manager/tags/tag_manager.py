@@ -113,11 +113,9 @@ class TagManager:
 
     def check_tag_exists_in_dependency(self, dep_name: str, tag_name: str) -> bool:
         dep_db = self.session.query(DependencyDB).filter_by(name=dep_name).first()
-        if not dep_db:
-            return False
-        
         tag_db = self.session.query(TagDB).filter_by(name=tag_name).first()
-        if not tag_db:
+        
+        if not dep_db or not tag_db:
             return False
         
         return self.session.query(DependencyTagDB).filter_by(dependency_id=dep_db.id, tag_id=tag_db.id).first() is not None

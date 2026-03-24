@@ -364,17 +364,50 @@ def clean_working_tree(dep_path: str) -> bool:
         return True
 
 
+def check_tag_valid(tag_name: str, dependency: str, dep_path: str):
+    if not check_valid_format(tag_name):
+        return False
+
+    tags = run_git_command(['git', 'tag', '--sort=-v:refname'], dep_path)
+    if tags is None:
+        rprint(f"[red]Error:[/red] Failed to get recent tag in '{dependency}'")
+        return False
+
+    tags = tags.strip().split("\n")
+    if tag_name in tags:
+        rprint(f"[red]Error:[/red] Tag '{tag_name}' already exists in '{dependency}'")
+        return False
+
+    if tags:
+        latest_tag = tags[0].split(".")
+        tag = tag_name.split(".")
+
+        if tag[-1] < latest_tag[-1] or tag[-2] < latest_tag[-2] or tag[-3].strip("v") < latest_tag[-3].strip("v"):
+            rprint(f"[red]Error:[/red] Tag '{tag_name}' is not greater than latest tag '{latest_tag.join(".")}' in '{dependency}'")
+            return False
+    
+    return True
+
+
+def check_valid_format(tag_name: str):
+    if not tag_name.startswith("v") or not tag_name.count(".") == 2 or not tag_name.split(".")[0].strip("v").isdigit() or not tag_name.split(".")[1].isdigit() or not tag_name.split(".")[2].isdigit():
+        rprint(f"[red]Error:[/red] Invalid tag format '{tag_name}', use format v<major>.<minor>.<patch>")
+        return False
+    else:
+        return True
+
+
 @tag_app.command("add")
 def tag_add(
     dependency: str = typer.Argument(..., help="Dependency name"),
-    tag_name: str = typer.Argument(..., help="Tag name"),
+    tag_name: Optional[str] = typer.Argument(None, help="Tag name"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
     """Add a tag to a dependency."""
     tag_mgr = TagManager()
     registry = DependencyRegistry()
-    
+        
     dep = registry.get(dependency)
     if not dep:
         rprint(f"[red]Error:[/red] Dependency '{dependency}' not found")
@@ -384,8 +417,23 @@ def tag_add(
     if not clean_working_tree(dep_path):
         rprint(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
         raise typer.Exit(1)
+
+    if tag_name is None:
+        local_tags = run_git_command(['git', 'tag'], dep_path)
+        if local_tags is None:
+            rprint(f"[red]Error:[/red] Failed to get local tags in '{dependency}'")
+            raise typer.Exit(1)
+        elif local_tags.strip() != "":
+            rprint(f"[red]Error:[/red] Local tags found in '{dependency}', to use default add behavior there should be no local tags.")
+            raise typer.Exit(1)
+        else:
+            tag_name = "v0.0.0"
+            tag_mgr.create_tag(name=tag_name, description=description, color=color)
+    else:
+        if not check_tag_valid(tag_name, dependency, dep_path):
+            raise typer.Exit(1)
+        tag_mgr.create_tag(name=tag_name, description=description, color=color)
     
-    tag_mgr.create_tag(name=tag_name, description=description, color=color)
     success = tag_mgr.add_tag_to_dependency(dependency, tag_name)
     if success:
         rprint(f"[green]Added tag '{tag_name}' to '{dependency}' in db[/green]")
@@ -401,6 +449,8 @@ def tag_add(
         rprint(f"[red]Error:[/red] Failed to create tag '{tag_name} in {dependency}'")
     else:
         rprint(f"[green]Created tag '{tag_name}' in '{dependency}' locally[/green]")
+
+    rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {tag_name}[/green]")
 
 
 @tag_app.command("push")

@@ -577,13 +577,7 @@ def tag_list(
         console.print(table)
 
 
-@tag_app.command("patch")
-def tag_patch(
-    dependency: str = typer.Argument(..., help="Dependency name"),
-    tag_name: str = typer.Argument(..., help="Tag name"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
-    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
-):
+def update_helper(dependency: str, tag_name: str, type: str, description: Optional[str] = None, color: Optional[str] = None):
     tag_mgr = TagManager()
     registry = DependencyRegistry()
 
@@ -611,9 +605,24 @@ def tag_patch(
     else:
         rprint(f"[green]Tag '{tag_name}' found locally in '{dependency}'[/green]")
 
-    tag = tag_name.split('.')
-    tag[-1] = str(int(tag[-1]) + 1)
-    new_tag = '.'.join(tag)
+    if type == "patch":
+        tag = tag_name.split('.')
+        tag[-1] = str(int(tag[-1]) + 1)
+        new_tag = '.'.join(tag)
+    elif type == "minor":
+        tag = tag_name.split('.')
+        tag[-2] = str(int(tag[-2]) + 1)
+        tag[-1] = '0'
+        new_tag = '.'.join(tag)
+    elif type == "major":
+        tag = tag_name.split('.')
+        tag[0] = 'v' + str(int(tag[0].lstrip('v')) + 1)
+        tag[-2] = '0'
+        tag[-1] = '0'
+        new_tag = '.'.join(tag)
+    else:
+        rprint(f"[red]Error:[/red] Invalid type '{type}'")
+        raise typer.Exit(1)
 
     tag_mgr.create_tag(name=new_tag, description=description, color=color)
     added = tag_mgr.add_tag_to_dependency(dependency, new_tag)
@@ -624,9 +633,9 @@ def tag_patch(
         rprint(f"[green]Added tag '{new_tag}' to '{dependency}'[/green]")
 
     if description is not None:
-        added_locally = run_git_command(['git', 'tag', '-a', tag_name, '-m', description], dep_path)
+        added_locally = run_git_command(['git', 'tag', '-a', new_tag, '-m', description], dep_path)
     else:
-        added_locally = run_git_command(['git', 'tag', tag_name], dep_path)
+        added_locally = run_git_command(['git', 'tag', new_tag], dep_path)
 
     if added_locally is None:
         rprint(f"[red]Error:[/red] Failed to add tag '{new_tag}' locally in '{dependency}'")
@@ -634,7 +643,37 @@ def tag_patch(
     else:
         rprint(f"[green]Added tag '{new_tag}' locally in '{dependency}'[/green]")
 
-    rprint("[green]To add tag remotely run: dtm tag push {dependency} {new_tag}[/green]")
+    rprint(f"[green]To add tag remotely run: dtm tag push {dependency} {new_tag}[/green]")
+
+
+@tag_app.command("patch")
+def tag_patch(
+    dependency: str = typer.Argument(..., help="Dependency name"),
+    tag_name: str = typer.Argument(..., help="Tag name"),
+    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
+    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+):
+    update_helper(dependency, tag_name, "patch", description, color)
+
+
+@tag_app.command("minor")
+def tag_minor(
+    dependency: str = typer.Argument(..., help="Dependency name"),
+    tag_name: str = typer.Argument(..., help="Tag name"),
+    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
+    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+):
+    update_helper(dependency, tag_name, "minor", description, color)
+
+
+@tag_app.command("major")
+def tag_major(
+    dependency: str = typer.Argument(..., help="Dependency name"),
+    tag_name: str = typer.Argument(..., help="Tag name"),
+    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
+    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+):
+    update_helper(dependency, tag_name, "major", description, color)
 
 
 @app.command()

@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 from rich import print as rprint
 from rich.syntax import Syntax
+from packaging.version import Version
 
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
@@ -378,6 +379,7 @@ def check_tag_valid(tag_name: str, dependency: str, dep_path: str):
         rprint(f"[red]Error:[/red] Tag '{tag_name}' already exists in '{dependency}'")
         return False
 
+
     if tags:
         latest_tag = tags[0].split(".")
         tag = tag_name.split(".")
@@ -453,6 +455,38 @@ def tag_add(
     rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {tag_name}[/green]")
 
 
+def push_sanitization(dependency: str, tag_name: str, dep_path: str):
+    remote_tags = run_git_command(['git', 'ls-remote', '--tags', 'origin'], dep_path)
+    if remote_tags is None:
+        rprint(f"[red]Error:[/red] Failed to check if '{tag_name}' exists remotely in '{dependency}'")
+        return False
+    elif remote_tags.strip() == "":
+        rprint(f"[green]No tags exist remotely in {dependency}[/green]")
+        return True
+    elif remote_tags.strip() != "":
+        tags = set()
+        for tag in remote_tags.strip().split('\n'):
+            if 'ref/tags/' in tag:
+                tag = tag.split('ref/tags/')[1]
+                tag = tag.replace('^{}', '')
+                tags.add(tag)
+        
+        if not tags:
+            rprint(f"[green]No tags exist with ref/tags/ in '{dependency}'[/green]")
+            return True
+
+        latest_tag = max(tags, key=Version)
+        if Version(tag_name) <= Version(latest_tag):
+            rprint(f"[red]Error:[/red] Tag '{tag_name}' is not greater than latest tag '{latest_tag}' in '{dependency}'")
+            return False
+        else:
+            rprint(f"[green]Tag '{tag_name}' is greater than latest tag '{latest_tag}' in '{dependency}'[/green]")
+            return True
+    else:
+        rprint(f"[red]Error:[/red] during push sanitization.")
+        return False
+
+
 @tag_app.command("push")
 def tag_push(
     dependency: str = typer.Argument(..., help="Dependency name"),
@@ -491,15 +525,9 @@ def tag_push(
     else:
         rprint(f"[green]Tag '{tag_name}' exists locally in '{dependency}'[/green]")
 
-    exists_remotely = run_git_command(['git', 'ls-remote', '--tags', 'origin', tag_name], dep_path)
-    if exists_remotely is None:
-        rprint(f"[red]Error:[/red] Checking if '{tag_name}' exists remotely in '{dependency}'")
+    if not push_sanitization(dependency, tag_name, dep_path):
+        rprint(f"[red]Error:[/red] Push sanitization failed")
         raise typer.Exit(1)
-    elif exists_remotely.strip() != "":
-        rprint(f"[red]Error:[/red] Tag '{tag_name}' already exists remotely in '{dependency}'")
-        raise typer.Exit(1)
-    else:
-        rprint(f"[green]Tag '{tag_name}' does not exist remotely in '{dependency}' - safe to push[/green]")
 
     output = run_git_command(['git', 'push', 'origin', tag_name], dep_path)
     if output is None:

@@ -22,3 +22,8 @@ dtm tag patch <package> <tag> -d "<description>"
 dtm tag minor <package> <tag> -d "<description>"
 dtm tag major <package> <tag> -d "<description>"
 ```
+
+## Commands
+
+| Command | Description | Usage |
+|------|--------------|---------|

@@ -365,7 +365,7 @@ def clean_working_tree(dep_path: str) -> bool:
         return True
 
 
-def check_tag_valid(tag_name: str, dependency: str, dep_path: str):
+def check_valid_tag(tag_name: str, dependency: str, dep_path: str):
     if not check_valid_format(tag_name):
         return False
 
@@ -373,21 +373,17 @@ def check_tag_valid(tag_name: str, dependency: str, dep_path: str):
     if tags is None:
         rprint(f"[red]Error:[/red] Failed to get recent tag in '{dependency}'")
         return False
-
-    tags = tags.strip().split("\n")
-    if tag_name in tags:
-        rprint(f"[red]Error:[/red] Tag '{tag_name}' already exists in '{dependency}'")
-        return False
-
-
+    elif tags.strip() == "":
+        rprint(f"[green]No tags exist in '{dependency}'[/green]")
+        return True
+    
     if tags:
-        latest_tag = tags[0].split(".")
-        tag = tag_name.split(".")
-
-        if tag[-1] < latest_tag[-1] or tag[-2] < latest_tag[-2] or tag[-3].strip("v") < latest_tag[-3].strip("v"):
+        latest_tag = tags.strip().split("\n")[0]
+        if Version(tag_name) <= Version(latest_tag):
             rprint(f"[red]Error:[/red] Tag '{tag_name}' is not greater than latest tag '{latest_tag.join(".")}' in '{dependency}'")
             return False
     
+    rprint(f"[green]Tag '{tag_name}' is valid in '{dependency}'[/green]")
     return True
 
 
@@ -430,12 +426,11 @@ def tag_add(
             raise typer.Exit(1)
         else:
             tag_name = "v0.0.0"
-            tag_mgr.create_tag(name=tag_name, description=description, color=color)
     else:
-        if not check_tag_valid(tag_name, dependency, dep_path):
+        if not check_valid_tag(tag_name, dependency, dep_path):
             raise typer.Exit(1)
-        tag_mgr.create_tag(name=tag_name, description=description, color=color)
     
+    tag_mgr.create_tag(name=tag_name, description=description, color=color)
     success = tag_mgr.add_tag_to_dependency(dependency, tag_name)
     if success:
         rprint(f"[green]Added tag '{tag_name}' to '{dependency}' in db[/green]")
@@ -466,8 +461,8 @@ def push_sanitization(dependency: str, tag_name: str, dep_path: str):
     elif remote_tags.strip() != "":
         tags = set()
         for tag in remote_tags.strip().split('\n'):
-            if 'ref/tags/' in tag:
-                tag = tag.split('ref/tags/')[1]
+            if 'refs/tags/' in tag:
+                tag = tag.split('refs/tags/')[1]
                 tag = tag.replace('^{}', '')
                 tags.add(tag)
         

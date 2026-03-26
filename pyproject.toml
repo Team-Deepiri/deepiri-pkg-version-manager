@@ -8,6 +8,7 @@ authors = [{name = "Deepiri"}]
 license = {text = "MIT"}
 keywords = ["deepiri", "dependency", "version", "package-manager"]
 dependencies = [
+    "PySide6>=6.0.0",
     "packaging>=23.0",
     "networkx>=3.0",
     "rich>=13.0",

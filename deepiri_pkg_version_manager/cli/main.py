@@ -1,6 +1,7 @@
 import json
 import typer
 import subprocess
+import sys
 from typing import Optional, List
 import subprocess
 from pathlib import Path
@@ -9,11 +10,13 @@ from rich.table import Table
 from rich import print as rprint
 from rich.syntax import Syntax
 from packaging.version import Version
+from PySide6.QtWidgets import QApplication
 
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.scanners.repo_scanner import scan_directory, get_install_command, get_install_all_command, version_sync_needed
 from deepiri_pkg_version_manager.graph.dependency_graph import DependencyGraph
+from deepiri_pkg_version_manager.ui.display import PackageManagerUI
 
 app = typer.Typer(
     name="dtm",
@@ -758,11 +761,14 @@ def tag_major(
     update_helper(dependency, tag_name, "major", description, color)
 
 
-@app.command()
+@app.command("display")
 def ui():
     """Launch animated TUI."""
     rprint("[yellow]TUI not yet implemented. Use CLI commands instead.[/yellow]")
-    raise typer.Exit(0)
+    app = QApplication(sys.argv)
+    window = PackageManagerUI()
+    window.show()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

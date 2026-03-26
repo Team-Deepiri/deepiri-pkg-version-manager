@@ -485,7 +485,7 @@ def push_sanitization(dependency: str, tag_name: str, dep_path: str):
 @tag_app.command("push")
 def tag_push(
     dependency: str = typer.Argument(..., help="Dependency name"),
-    tag_name: str = typer.Argument(..., help="Tag name")
+    tag_name: Optional[str] = typer.Argument(None, help="Tag name")
 ):
     """Push a tag to a dependency."""
     tag_mgr = TagManager()
@@ -505,6 +505,15 @@ def tag_push(
     if not clean_working_tree(dep_path):
         rprint(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
         raise typer.Exit(1)
+
+    if tag_name is None:
+        local_tags = run_git_command(['git', 'tag', '--sort=-v:refname'], dep_path)
+        if local_tags is None or local_tags.strip() == "":
+            rprint(f"[red]Error:[/red] There are no tags to push in '{dependency}'")
+            raise typer.Exit(1)
+        elif local_tags.strip() != "":
+            tag_name = local_tags.strip().split("\n")[0]
+            rprint(f"[green]Pushing latest tag '{tag_name}' in '{dependency}'[/green]")
     
     exists_in_db = tag_mgr.check_tag_exists_in_dependency(dependency, tag_name)
     if not exists_in_db:

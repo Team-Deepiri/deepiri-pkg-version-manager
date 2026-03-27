@@ -6,14 +6,19 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QSplitter
 )
 from PySide6.QtCore import Qt
+from deepiri_pkg_version_manager.tags.tag_manager import TagManager
+from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
 
 
 class PackageManagerUI(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Package Manager")
+        self.setWindowTitle("Deepiri Package Version Manager")
         self.setGeometry(100, 100, 1000, 600)
+
+        self.tag_manager = TagManager()
+        self.dependency_registry = DependencyRegistry()
 
         # Main container
         main_widget = QWidget()
@@ -21,10 +26,8 @@ class PackageManagerUI(QMainWindow):
 
         # --- Top Buttons ---
         button_layout = QHBoxLayout()
-
         self.add_tag_btn = QPushButton("Add Tag")
         self.push_tag_btn = QPushButton("Push Tag")
-        self.sync_btn = QPushButton("Sync")
         self.delete_tag_btn = QPushButton("Delete Tag")
 
         button_layout.addWidget(self.add_tag_btn)
@@ -47,7 +50,7 @@ class PackageManagerUI(QMainWindow):
         # Table for versions
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels([
-            "Name", "Current Version", "Local Version", "Status"
+            "Name", "Remote Version", "Local Version", "Status"
         ])
 
         # Tag view

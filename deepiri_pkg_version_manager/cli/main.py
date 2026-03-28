@@ -364,6 +364,20 @@ def run_git_command(command: List[str], cwd: str) -> Optional[str]:
         return None
 
 
+def dependency_tree_check(dependency: str, registry: DependencyRegistry):
+    dep = registry.get(dependency)
+    if not dep:
+        rprint(f"[red]Error:[/red] Dependency '{dependency}' not found")
+        return False
+
+    dep_path = dep.repo_path
+    if not clean_working_tree(dep_path):
+        rprint(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
+        return False
+
+    return True
+
+
 def clean_working_tree(dep_path: str) -> bool:
     clean = run_git_command(['git', 'status', '--porcelain'], dep_path)
     if clean is None:
@@ -444,18 +458,6 @@ def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistr
 
     rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {tag_name}[/green]")
 
-
-def dependency_tree_check(dependency: str, registry: DependencyRegistry):
-    dep = registry.get(dependency)
-    if not dep:
-        rprint(f"[red]Error:[/red] Dependency '{dependency}' not found")
-        raise typer.Exit(1)
-
-    dep_path = dep.repo_path
-    if not clean_working_tree(dep_path):
-        rprint(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
-        raise typer.Exit(1)
-
 @tag_app.command("add")
 def tag_add(
     dependency: str = typer.Argument(..., help="Dependency name"),
@@ -466,7 +468,8 @@ def tag_add(
     """Add a tag to a dependency."""
     tag_mgr = TagManager()
     registry = DependencyRegistry()
-    dependency_tree_check(dependency, registry)
+    if not dependency_tree_check(dependency, registry):
+        raise typer.Exit(1)
     create_tag(dependency, tag_mgr, registry, tag_name, description, color)
 
 
@@ -586,7 +589,8 @@ def tag_push(
 
     dep = registry.get(dependency)
     dep_path = dep.repo_path
-    dependency_tree_check(dependency, registry)
+    if not dependency_tree_check(dependency, registry):
+        raise typer.Exit(1)
     push_tag(dependency, dep_path, tag_mgr, tag_name)
     if dep.is_submodule:
         push_submodule(dependency, tag_name, dep_path)
@@ -633,7 +637,8 @@ def tag_remove(
     """Remove a tag from a dependency."""
     tag_mgr = TagManager()
     registry = DependencyRegistry()
-    dependency_tree_check(dependency, registry)
+    if not dependency_tree_check(dependency, registry):
+        raise typer.Exit(1)
     remove_tag(dependency, tag_name, tag_mgr, registry)
 
 

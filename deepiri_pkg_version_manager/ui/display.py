@@ -1,17 +1,18 @@
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget,
+    QMainWindow, QWidget,
     QVBoxLayout, QHBoxLayout, QListWidget,
     QTableWidget, QTableWidgetItem,
-    QPushButton, QLabel, QSplitter, QHeaderView,
+    QPushButton, QLabel, QSplitter, QHeaderView
 )
 from PySide6.QtCore import Qt
 from rich import print as rprint
 from packaging.version import Version
 
+from deepiri_pkg_version_manager.ui.prompts import prompt_tag_name_and_description
 
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.cli.main import run_git_command
+from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag
 
 
 class PackageManagerUI(QMainWindow):
@@ -146,7 +147,24 @@ class PackageManagerUI(QMainWindow):
             self.remote_tag_list.addItem(tag)
 
     def on_add_tag(self):
-        print("Add tag clicked")
+        item = self.dep_list.currentItem()
+        if not item:
+            result = prompt_tag_name_and_description(self, self.dependency_registry)
+            if result is None:
+                return
+            dep_name, tag_name, description = result
+            print(dep_name, tag_name, description)
+        else:
+            dep_name = item.text()
+            if not dependency_tree_check(dep_name, self.dependency_registry):
+                return
+            result = prompt_tag_name_and_description(self, self.dependency_registry, dep=dep_name)
+            if result is None:
+                return
+            tag_name, description = result
+            print(dep_name, tag_name, description)
+
+        create_tag(dep_name, self.tag_manager, self.dependency_registry, tag_name, description)
 
     def on_push_tag(self):
         print("Push tag clicked")

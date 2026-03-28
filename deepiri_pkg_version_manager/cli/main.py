@@ -343,12 +343,24 @@ def export(
         console.print(output_str)
 
 
-def run_git_command(command: str, cwd: str) -> str:
+def run_git_command(command: List[str], cwd: str) -> Optional[str]:
     try:
-        process = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
-        return process.stdout.strip()
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+
     except subprocess.CalledProcessError as e:
-        rprint(f"[red]Error:[/red] {e}")
+        error_msg = e.stderr.strip() if e.stderr else str(e)
+        rprint(f"[red]Git Error:[/red] {error_msg}")
+        return None
+
+    except Exception as e:
+        rprint(f"[red]Unexpected Error:[/red] {e}")
         return None
 
 

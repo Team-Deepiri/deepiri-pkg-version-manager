@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QVBoxLayout, QHBoxLayout, QListWidget,
     QTableWidget, QTableWidgetItem,
-    QPushButton, QLabel, QSplitter
+    QPushButton, QLabel, QSplitter, QHeaderView,
 )
 from PySide6.QtCore import Qt
 from rich import print as rprint
@@ -39,8 +39,12 @@ class PackageManagerUI(QMainWindow):
         splitter = QSplitter(Qt.Horizontal)
 
         self.dep_list = QListWidget()
-        self.dep_list.addItems([dep.name for dep in self.dependency_registry.get_all()])
+        self.dependencies = self.dependency_registry.get_all()
+        self.dep_list.addItems([dep.name for dep in self.dependencies])
         splitter.addWidget(self.dep_list)
+
+        self.remote_tags = {}
+        self.local_tags = {}
 
         right_panel = QWidget()
         right_layout = QVBoxLayout()
@@ -49,13 +53,45 @@ class PackageManagerUI(QMainWindow):
         self.table.setHorizontalHeaderLabels([
             "Name", "Remote Version", "Local Version", "Status"
         ])
+        table_header = self.table.horizontalHeader()
+        table_header.setSectionsMovable(False)
+        for col in range(4):
+            table_header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._apply_table_column_widths()
+        self.load_dependency_data()
 
-        self.tag_label = QLabel("Tags:")
-        self.tag_list = QListWidget()
+        tags_row = QWidget()
+        tags_row_layout = QHBoxLayout(tags_row)
+        tags_row_layout.setContentsMargins(0, 0, 0, 0)
+
+        local_col = QVBoxLayout()
+        local_label = QLabel("Local tags")
+        self.local_tag_list = QListWidget()
+        local_col.addWidget(local_label)
+        local_col.addWidget(self.local_tag_list)
+
+        remote_col = QVBoxLayout()
+        remote_label = QLabel("Remote tags")
+        self.remote_tag_list = QListWidget()
+        remote_col.addWidget(remote_label)
+        remote_col.addWidget(self.remote_tag_list)
+
+        tags_row_layout.addLayout(local_col, 1)
+        tags_row_layout.addLayout(remote_col, 1)
+
+        bump_row = QHBoxLayout()
+        bump_row.setContentsMargins(0, 0, 0, 0)
+        self.patch_btn = QPushButton("Patch")
+        self.minor_btn = QPushButton("Minor")
+        self.major_btn = QPushButton("Major")
+        bump_row.addWidget(self.patch_btn)
+        bump_row.addWidget(self.minor_btn)
+        bump_row.addWidget(self.major_btn)
 
         right_layout.addWidget(self.table)
-        right_layout.addWidget(self.tag_label)
-        right_layout.addWidget(self.tag_list)
+        right_layout.addWidget(tags_row)
+        right_layout.addLayout(bump_row)
 
         right_panel.setLayout(right_layout)
         splitter.addWidget(right_panel)
@@ -72,12 +108,42 @@ class PackageManagerUI(QMainWindow):
         self.add_tag_btn.clicked.connect(self.on_add_tag)
         self.push_tag_btn.clicked.connect(self.on_push_tag)
         self.remove_tag_btn.clicked.connect(self.on_remove_tag)
+        self.patch_btn.clicked.connect(self.on_patch)
+        self.minor_btn.clicked.connect(self.on_minor)
+        self.major_btn.clicked.connect(self.on_major)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._apply_table_column_widths()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_table_column_widths()
+
+    def _apply_table_column_widths(self) -> None:
+        """Fill table width: Name = 50%, other columns split the rest equally; no manual resize."""
+        w = self.table.viewport().width()
+        if w <= 0:
+            return
+        name_w = int(w * 0.5)
+        rem = w - name_w
+        third = rem // 3
+        rest = rem - 2 * third
+        self.table.setColumnWidth(0, name_w)
+        self.table.setColumnWidth(1, third)
+        self.table.setColumnWidth(2, third)
+        self.table.setColumnWidth(3, rest)
 
     def on_dependency_selected(self, current, previous):
-        if current:
-            dep_name = current.text()
-            print(f"Selected dependency: {dep_name}")
-            self.load_dependency_data(dep_name)
+        self.local_tag_list.clear()
+        self.remote_tag_list.clear()
+        if not current:
+            return
+        dep_name = current.text()
+        for tag in self.local_tags.get(dep_name, []):
+            self.local_tag_list.addItem(tag)
+        for tag in self.remote_tags.get(dep_name, []):
+            self.remote_tag_list.addItem(tag)
 
     def on_add_tag(self):
         print("Add tag clicked")
@@ -88,33 +154,45 @@ class PackageManagerUI(QMainWindow):
     def on_remove_tag(self):
         print("Remove tag clicked")
 
-    def load_dependency_data(self, dep_name):
-        dep = self.dependency_registry.get(dep_name)
-        remote_tags = self.get_remote_tags(dep_name, dep.repo_path)
-        if remote_tags is None:
-            remote_tag = "None"
-        else:
-            remote_tag = remote_tags[0]
+    def on_patch(self):
+        print("Patch clicked")
 
-        local_tags = self.get_local_tags(dep_name, dep.repo_path)
-        if local_tags is None:
-            local_tag = "None"
-        else:
-            local_tag = local_tags[0]
+    def on_minor(self):
+        print("Minor clicked")
 
-        # Ensure row 0 exists before setting table cells.
-        self.table.setRowCount(1)
-        self.table.setItem(0, 0, QTableWidgetItem(dep_name))
-        self.table.setItem(0, 1, QTableWidgetItem(remote_tag))
-        self.table.setItem(0, 2, QTableWidgetItem(local_tag))
-        self.table.setItem(0, 3, QTableWidgetItem(self.get_status(remote_tags[0], local_tags[0])))
+    def on_major(self):
+        print("Major clicked")
+
+    def load_dependency_data(self):
+        self.table.setRowCount(len(self.dependencies))
+        for index, dep in enumerate(self.dependencies):
+            remote_tags = self.get_remote_tags(dep.name, dep.repo_path)
+            if remote_tags is None:
+                remote_tag = "None"
+                self.remote_tags[dep.name] = []
+            else:
+                remote_tag = remote_tags[0]
+                self.remote_tags[dep.name] = remote_tags
+
+            local_tags = self.get_local_tags(dep.name, dep.repo_path)
+            if local_tags is None:
+                local_tag = "None"
+                self.local_tags[dep.name] = []
+            else:
+                local_tag = local_tags[0]
+                self.local_tags[dep.name] = local_tags
+
+            self.table.setItem(index, 0, QTableWidgetItem(dep.name))
+            self.table.setItem(index, 1, QTableWidgetItem(remote_tag))
+            self.table.setItem(index, 2, QTableWidgetItem(local_tag))
+            self.table.setItem(index, 3, QTableWidgetItem(self.get_status(remote_tag, local_tag)))
 
     def get_status(self, remote_tag, local_tag) -> str:
-        if (remote_tag is None and local_tag is None) or (Version(remote_tag) == Version(local_tag)):
+        if (remote_tag == "None" and local_tag == "None") or (Version(remote_tag) == Version(local_tag)):
             return "Up to date"
-        elif remote_tag is None and local_tag is not None:
+        elif remote_tag == "None" and local_tag != "None":
             return "Ahead"
-        elif remote_tag is not None and local_tag is None:
+        elif remote_tag != "None" and local_tag == "None":
             return "Behind"
         elif Version(remote_tag) > Version(local_tag):
             return "Ahead"

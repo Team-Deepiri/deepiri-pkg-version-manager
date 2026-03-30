@@ -2,17 +2,18 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget,
     QVBoxLayout, QHBoxLayout, QListWidget,
     QTableWidget, QTableWidgetItem,
-    QPushButton, QLabel, QSplitter, QHeaderView
+    QPushButton, QLabel, QSplitter, QHeaderView,
+    QMessageBox
 )
 from PySide6.QtCore import Qt
 from rich import print as rprint
 from packaging.version import Version
 
-from deepiri_pkg_version_manager.ui.prompts import prompt_tag_name_and_description
+from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push
 
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag
+from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag, push_tag, push_submodule
 
 
 class PackageManagerUI(QMainWindow):
@@ -42,6 +43,7 @@ class PackageManagerUI(QMainWindow):
         self.dep_list = QListWidget()
         self.dependencies = self.dependency_registry.get_all()
         self.dep_list.addItems([dep.name for dep in self.dependencies])
+        self.row_for_dependencies = {dep.name: index for index, dep in enumerate(self.dependencies)}
         splitter.addWidget(self.dep_list)
 
         self.remote_tags = {}
@@ -142,32 +144,85 @@ class PackageManagerUI(QMainWindow):
             return
         dep_name = current.text()
         for tag in self.local_tags.get(dep_name, []):
-            self.local_tag_list.addItem(tag)
+            self.local_tag_list.addItem(f" - {tag}")
         for tag in self.remote_tags.get(dep_name, []):
-            self.remote_tag_list.addItem(tag)
+            self.remote_tag_list.addItem(f" - {tag}")
 
     def on_add_tag(self):
         item = self.dep_list.currentItem()
         if not item:
-            result = prompt_tag_name_and_description(self, self.dependency_registry)
+            result = prompt_add(self, self.dependency_registry)
             if result is None:
                 return
             dep_name, tag_name, description = result
-            print(dep_name, tag_name, description)
         else:
             dep_name = item.text()
             if not dependency_tree_check(dep_name, self.dependency_registry):
                 return
-            result = prompt_tag_name_and_description(self, self.dependency_registry, dep=dep_name)
+            result = prompt_add(self, self.dependency_registry, dep=dep_name)
             if result is None:
                 return
             tag_name, description = result
-            print(dep_name, tag_name, description)
 
-        create_tag(dep_name, self.tag_manager, self.dependency_registry, tag_name, description)
+        if not create_tag(dep_name, self.tag_manager, self.dependency_registry, tag_name, description):
+            QMessageBox.warning(
+                self,
+                "Error",
+                "Failed to create tag",
+            )
+            return
+        else:
+            self.local_tags[dep_name].insert(0, tag_name)
+            self.table.setItem(self.row_for_dependencies[dep_name], 2, QTableWidgetItem(tag_name))
+            if item:
+                self.local_tag_list.insertItem(0, f" - {tag_name}")
+
+        self.success_message(f"Tag '{tag_name}' added to '{dep_name}'")
 
     def on_push_tag(self):
-        print("Push tag clicked")
+        item = self.dep_list.currentItem()
+        if not item:
+            result = prompt_push()
+            if result is None:
+                return
+            dep_name, tag_name = result
+        else:
+            dep_name = item.text()
+            if not dependency_tree_check(dep_name, self.dependency_registry):
+                return
+            local_tag_item = self.local_tag_list.currentItem()
+            if local_tag_item is None:
+                result = prompt_push(self, self.dependency_registry, dep=dep_name)
+                if result is None:
+                    return
+                tag_name = result
+            else:
+                tag_name = local_tag_item.text().split(' - ')[1]
+
+        dep = self.dependency_registry.get(dep_name)
+        if not push_tag(dep_name, self.dependency_registry.get(dep_name).repo_path, self.tag_manager, tag_name):
+            QMessageBox.warning(
+                self,
+                "Error",
+                "Failed to push tag",
+            )
+            return
+        else:
+            self.remote_tags[dep_name].insert(0, tag_name)
+            self.table.setItem(self.row_for_dependencies[dep_name], 1, QTableWidgetItem(tag_name))
+            if item:
+                self.remote_tag_list.insertItem(0, f" - {tag_name}")
+
+        if dep.is_submodule:
+            if not push_submodule(dep_name, tag_name, dep.repo_path):
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    "Failed to push new tag to submodule parent",
+                )
+                return
+
+        self.success_message(f"Tag '{tag_name}' pushed to '{dep_name}'")
 
     def on_remove_tag(self):
         print("Remove tag clicked")
@@ -240,3 +295,10 @@ class PackageManagerUI(QMainWindow):
         else:
             rprint('[green]Remote tags fetched successfully[/green]')
             return [tag.split('refs/tags/')[1] for tag in output.strip().split('\n')]
+
+    def success_message(self, message: str) -> None:
+        QMessageBox.information(
+            self,
+            "Operation Successful",
+            message,
+        )

@@ -457,6 +457,7 @@ def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistr
         rprint(f"[green]Created tag '{tag_name}' in '{dependency}' locally[/green]")
 
     rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {tag_name}[/green]")
+    return True
 
 @tag_app.command("add")
 def tag_add(
@@ -505,12 +506,12 @@ def push_sanitization(dependency: str, tag_name: str, dep_path: str):
         return False
 
 
-def push_submodule(dependency: str, tag_name: str, dep_path: str):
+def push_submodule(dependency: str, tag_name: str, dep_path: str) -> bool:
     """Update dependency root if dependency is a submodule"""
     checkout = run_git_command(['git', 'checkout', tag_name], dep_path)
     if checkout is None:
         rprint(f"[red]Error:[/red] Failed to checkout tag '{tag_name}' in '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Checked out tag '{tag_name}' in '{dependency}'[/green]")
 
@@ -518,36 +519,38 @@ def push_submodule(dependency: str, tag_name: str, dep_path: str):
     add = run_git_command(['git', 'add', dep_path], main_path)
     if add is None:
         rprint(f"[red]Error:[/red] Failed to add changes in '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Added changes in '{dependency}' to main repository[/green]")
     
     commit = run_git_command(['git', 'commit', '-m', f"Update dependency '{dependency}' to tag '{tag_name}'"], main_path)
     if commit is None:
         rprint(f"[red]Error:[/red] Failed to commit changes in '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Committed changes in '{dependency}' to main repository[/green]")
         
     push = run_git_command(['git', 'push', 'origin', 'HEAD'], main_path)
     if push is None:
         rprint(f"[red]Error:[/red] Failed to push new version '{tag_name}' in '{dependency}' to main repository")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Pushed new version '{tag_name}' in '{dependency}' to main repository[/green]")
 
+    return True
 
-def push_tag(dependency: str, dep_path: str, tag_mgr: TagManager, tag_name: Optional[str] = None):
+
+def push_tag(dependency: str, dep_path: str, tag_mgr: TagManager, tag_name: Optional[str] = None) -> bool:
     is_repo = run_git_command(['git', 'rev-parse', '--is-inside-work-tree'], dep_path)
     if is_repo is None or is_repo != 'true':
         rprint(f"[red]Error:[/red] Dependency '{dependency}' is not a submodule or repository, cannot push tag")
-        raise typer.Exit(1)
+        return False
 
     if tag_name is None:
         local_tags = run_git_command(['git', 'tag', '--sort=-v:refname'], dep_path)
         if local_tags is None or local_tags.strip() == "":
             rprint(f"[red]Error:[/red] There are no tags to push in '{dependency}'")
-            raise typer.Exit(1)
+            return False
         elif local_tags.strip() != "":
             tag_name = local_tags.strip().split("\n")[0]
             rprint(f"[green]Pushing latest tag '{tag_name}' in '{dependency}'[/green]")
@@ -555,27 +558,29 @@ def push_tag(dependency: str, dep_path: str, tag_mgr: TagManager, tag_name: Opti
     exists_in_db = tag_mgr.check_tag_exists_in_dependency(dependency, tag_name)
     if not exists_in_db:
         rprint(f"[red]Error:[/red] Tag '{tag_name}' not found in dependency '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Tag '{tag_name}' exists in dependency '{dependency}'[/green]")
 
     exists_locally = run_git_command(['git', 'tag', '--list', tag_name], dep_path)
     if exists_locally is None or exists_locally.strip() == "":
         rprint(f"[red]Error:[/red] Tag '{tag_name}' not found locally in '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Tag '{tag_name}' exists locally in '{dependency}'[/green]")
 
     if not push_sanitization(dependency, tag_name, dep_path):
         rprint(f"[red]Error:[/red] Push sanitization failed")
-        raise typer.Exit(1)
+        return False
 
     output = run_git_command(['git', 'push', 'origin', tag_name], dep_path)
     if output is None:
         rprint(f"[red]Error:[/red] Failed to push tag '{tag_name}' to '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Pushed tag '{tag_name}' to '{dependency}'[/green]")
+
+    return True
 
 
 @tag_app.command("push")
@@ -591,9 +596,11 @@ def tag_push(
     dep_path = dep.repo_path
     if not dependency_tree_check(dependency, registry):
         raise typer.Exit(1)
-    push_tag(dependency, dep_path, tag_mgr, tag_name)
+    if not push_tag(dependency, dep_path, tag_mgr, tag_name):
+        raise typer.Exit(1)
     if dep.is_submodule:
-        push_submodule(dependency, tag_name, dep_path)
+        if not push_submodule(dependency, tag_name, dep_path):
+            raise typer.Exit(1)
 
 
 def remove_tag(dependency: str, tag_name: str, tag_mgr: TagManager, registry: DependencyRegistry):

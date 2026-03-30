@@ -9,11 +9,11 @@ from PySide6.QtCore import Qt
 from rich import print as rprint
 from packaging.version import Version
 
-from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push
+from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push, prompt_remove
 
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag, push_tag, push_submodule
+from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag, push_tag, push_submodule, remove_tag
 
 
 class PackageManagerUI(QMainWindow):
@@ -165,15 +165,13 @@ class PackageManagerUI(QMainWindow):
             tag_name, description = result
 
         if not create_tag(dep_name, self.tag_manager, self.dependency_registry, tag_name, description):
-            QMessageBox.warning(
-                self,
-                "Error",
-                "Failed to create tag",
-            )
+            self.error_message("Failed to create tag")
             return
         else:
             self.local_tags[dep_name].insert(0, tag_name)
             self.table.setItem(self.row_for_dependencies[dep_name], 2, QTableWidgetItem(tag_name))
+            remote_tag = self.table.item(self.row_for_dependencies[dep_name], 1).text()
+            self.table.setItem(self.row_for_dependencies[dep_name], 3, QTableWidgetItem(self.get_status(remote_tag, tag_name)))
             if item:
                 self.local_tag_list.insertItem(0, f" - {tag_name}")
 
@@ -182,7 +180,7 @@ class PackageManagerUI(QMainWindow):
     def on_push_tag(self):
         item = self.dep_list.currentItem()
         if not item:
-            result = prompt_push()
+            result = prompt_push(self, self.dependency_registry)
             if result is None:
                 return
             dep_name, tag_name = result
@@ -191,6 +189,10 @@ class PackageManagerUI(QMainWindow):
             if not dependency_tree_check(dep_name, self.dependency_registry):
                 return
             local_tag_item = self.local_tag_list.currentItem()
+            remote_tag_item = self.remote_tag_list.currentItem()
+            if local_tag_item is None and remote_tag_item is not None:
+                self.error_message("Cannot push remote tags, please select a local tag to push.")
+                return
             if local_tag_item is None:
                 result = prompt_push(self, self.dependency_registry, dep=dep_name)
                 if result is None:
@@ -201,31 +203,62 @@ class PackageManagerUI(QMainWindow):
 
         dep = self.dependency_registry.get(dep_name)
         if not push_tag(dep_name, self.dependency_registry.get(dep_name).repo_path, self.tag_manager, tag_name):
-            QMessageBox.warning(
-                self,
-                "Error",
-                "Failed to push tag",
-            )
+            self.error_message("Failed to push tag")
             return
         else:
             self.remote_tags[dep_name].insert(0, tag_name)
             self.table.setItem(self.row_for_dependencies[dep_name], 1, QTableWidgetItem(tag_name))
+            local_tag = self.table.item(self.row_for_dependencies[dep_name], 2).text()
+            self.table.setItem(self.row_for_dependencies[dep_name], 3, QTableWidgetItem(self.get_status(tag_name, local_tag)))
             if item:
                 self.remote_tag_list.insertItem(0, f" - {tag_name}")
 
         if dep.is_submodule:
             if not push_submodule(dep_name, tag_name, dep.repo_path):
-                QMessageBox.warning(
-                    self,
-                    "Error",
-                    "Failed to push new tag to submodule parent",
-                )
+                self.error_message("Failed to push new tag to submodule parent")
                 return
 
         self.success_message(f"Tag '{tag_name}' pushed to '{dep_name}'")
 
     def on_remove_tag(self):
-        print("Remove tag clicked")
+        item = self.dep_list.current()
+        if item is None:
+            result = prompt_remove(self, self.dependency_registry)
+            if result is None:
+                return
+            dep_name, tag_name = result
+        else:
+            dep_name = item.text()
+            local_tag_item = self.local_tag_list.currentItem()
+            remote_tag_item = self.remote_tag_list.currentItem()
+            if local_tag_item is None and remote_tag_item is None:
+                result = prompt_remove(self, self.dependency_registry, dep=dep_name)
+                if result is None:
+                    return
+                tag_name = result
+            elif local_tag_item is not None and remote_tag_item is None:
+                tag_name = local_tag_item.text().split(' - ')[1]
+            elif local_tag_item is None and remote_tag_item is not None:
+                tag_name = remote_tag_item.text().split(' - ')[1]
+            else:
+                if local_tag_item.text().split(' - ')[1] == remote_tag_item.text().split(' - ')[1]:
+                    tag_name = local_tag_item.text().split(' - ')[1]
+                else:
+                    self.error_message("Cannot remove tags, please select the same tag from both local and remote.")
+                    return
+
+        success = remove_tag(dep_name, tag_name, self.tag_manager, self.dependency_registry)
+        if not success:
+            self.error_message("Failed to remove tag")
+            return
+        else:
+            if tag_name in self.remote_tags[dep_name]:
+                self.remote_tags[dep_name].remove(tag_name)
+            if tag_name in self.local_tags[dep_name]:
+                self.local_tags[dep_name].remove(tag_name)
+
+
+        self.success_message(f"Tag '{tag_name}' removed from '{dep_name}'")
 
     def on_patch(self):
         print("Patch clicked")
@@ -268,9 +301,9 @@ class PackageManagerUI(QMainWindow):
         elif remote_tag != "None" and local_tag == "None":
             return "Behind"
         elif Version(remote_tag) > Version(local_tag):
-            return "Ahead"
-        elif Version(remote_tag) < Version(local_tag):
             return "Behind"
+        elif Version(remote_tag) < Version(local_tag):
+            return "Ahead"
 
     def get_local_tags(self, dep_name, repo_path):
         output = run_git_command(['git', 'tag', '--sort=-v:refname'], repo_path)
@@ -300,5 +333,12 @@ class PackageManagerUI(QMainWindow):
         QMessageBox.information(
             self,
             "Operation Successful",
+            message,
+        )
+
+    def error_message(self, message: str) -> None:
+        QMessageBox.warning(
+            self,
+            "Error",
             message,
         )

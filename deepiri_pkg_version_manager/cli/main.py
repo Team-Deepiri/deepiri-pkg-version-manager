@@ -612,28 +612,30 @@ def remove_tag(dependency: str, tag_name: str, tag_mgr: TagManager, registry: De
         rprint(f"[green]Removed tag '{tag_name}' from '{dependency}' in db[/green]")
     else:
         rprint(f"[red]Error:[/red] Tag or dependency not found")
-        raise typer.Exit(1)
+        return False
 
     remove_locally = run_git_command(['git', 'tag', '-d', tag_name], dep_path)
     if remove_locally is None:
         rprint(f"[red]Error:[/red] Failed to remove tag '{tag_name}' from '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Removed tag '{tag_name}' from '{dependency}' locally[/green]")
     
     check_remote = run_git_command(['git', 'ls-remote', '--tags', 'origin', tag_name], dep_path)
     if check_remote is None:
         rprint(f"[red]Error:[/red] Failed to check if tag '{tag_name}' exists remotely in '{dependency}'")
-        raise typer.Exit(1)
+        return False
     elif check_remote.strip() != "":
         delete = run_git_command(['git', 'push', 'origin', '--delete', tag_name], dep_path)
         if delete is None:
             rprint(f"[red]Error:[/red] Failed to delete tag '{tag_name}' from '{dependency}'")
-            raise typer.Exit(1)
+            return False
         else:
             rprint(f"[green]Deleted tag '{tag_name}' from '{dependency}'[/green]")
     else:
         rprint(f"[green]Tag '{tag_name}' does not exist remotely in '{dependency}'[/green]")
+
+    return True
 
 
 @tag_app.command("remove")
@@ -646,7 +648,8 @@ def tag_remove(
     registry = DependencyRegistry()
     if not dependency_tree_check(dependency, registry):
         raise typer.Exit(1)
-    remove_tag(dependency, tag_name, tag_mgr, registry)
+    if not remove_tag(dependency, tag_name, tag_mgr, registry):
+        raise typer.Exit(1)
 
 
 @tag_app.command("list")

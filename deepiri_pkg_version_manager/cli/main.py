@@ -691,11 +691,11 @@ def tag_list(
         console.print(table)
 
 
-def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str, description: Optional[str] = None, color: Optional[str] = None):
+def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str, description: Optional[str] = None, color: Optional[str] = None) -> str | None:
     recent_local = run_git_command(['git', 'tag', '--sort=-v:refname'], dep_path)
     if recent_local is None or recent_local.strip() == "":
         rprint(f"[red]Error:[/red] No tags found in '{dependency}'")
-        return False
+        return None
     else:
         tag_name = recent_local.strip().split("\n")[0]
         rprint(f"[green]Recent local tag in '{dependency}' is '{recent_local}'[/green]")
@@ -717,13 +717,13 @@ def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str
         new_tag = '.'.join(tag)
     else:
         rprint(f"[red]Error:[/red] Invalid type '{type}'")
-        return False
+        return None
 
     tag_mgr.create_tag(name=new_tag, description=description, color=color)
     added = tag_mgr.add_tag_to_dependency(dependency, new_tag)
     if not added:
         rprint(f"[red]Error:[/red] Failed to add tag '{new_tag}' to '{dependency}'")
-        return False
+        return None
     else:
         rprint(f"[green]Added tag '{new_tag}' to '{dependency}'[/green]")
 
@@ -734,12 +734,12 @@ def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str
 
     if added_locally is None:
         rprint(f"[red]Error:[/red] Failed to add tag '{new_tag}' locally in '{dependency}'")
-        return False
+        return None
     else:
         rprint(f"[green]Added tag '{new_tag}' locally in '{dependency}'[/green]")
 
     rprint(f"[green]To add tag remotely run: dtm tag push {dependency} {new_tag}[/green]")
-    return True
+    return new_tag
 
 
 @tag_app.command("patch")
@@ -754,7 +754,7 @@ def tag_patch(
     if not dependency_tree_check(dependency, registry):
         raise typer.Exit(1)
     dep_path = registry.get(dependency).repo_path
-    if not update_helper(dependency, tag_mgr, dep_path, "patch", description, color):
+    if update_helper(dependency, tag_mgr, dep_path, "patch", description, color) is None:
         raise typer.Exit(1)
 
 
@@ -770,7 +770,7 @@ def tag_minor(
     if not dependency_tree_check(dependency, registry):
         raise typer.Exit(1)
     dep_path = registry.get(dependency).repo_path
-    if not update_helper(dependency, tag_mgr, dep_path, "minor", description, color):
+    if update_helper(dependency, tag_mgr, dep_path, "minor", description, color) is None:
         raise typer.Exit(1)
 
 
@@ -786,7 +786,7 @@ def tag_major(
     if not dependency_tree_check(dependency, registry):
         raise typer.Exit(1)
     dep_path = registry.get(dependency).repo_path
-    if not update_helper(dependency, tag_mgr, dep_path, "major", description, color):
+    if update_helper(dependency, tag_mgr, dep_path, "major", description, color) is None:
         raise typer.Exit(1)
 
 

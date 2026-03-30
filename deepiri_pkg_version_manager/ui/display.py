@@ -9,11 +9,11 @@ from PySide6.QtCore import Qt, QEvent
 from rich import print as rprint
 from packaging.version import Version
 
-from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push, prompt_remove
+from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push, prompt_remove, prompt_update
 
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag, push_tag, push_submodule, remove_tag
+from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag, push_tag, push_submodule, remove_tag, update_helper
 
 
 class PackageManagerUI(QMainWindow):
@@ -289,7 +289,35 @@ class PackageManagerUI(QMainWindow):
         self.success_message(f"Tag '{tag_name}' removed from '{dep_name}'")
 
     def on_patch(self):
-        print("Patch clicked")
+        item = self.dep_list.currentItem()
+        if not item:
+            result = prompt_update(self, self.dependency_registry, "patch")
+            if result is None:
+                return
+            dep_name, description = result
+        else:
+            dep_name = item.text()
+            if self.local_tags[dep_name] is None:
+                self.error_message("No local tags found for this dependency")
+                return
+            result = prompt_update(self, self.dependency_registry, "patch", dep=dep_name)
+            if result is None:
+                return
+            description = result
+
+        tag_name = update_helper(dep_name, self.tag_manager, self.dependency_registry.get(dep_name).repo_path, "patch", description)
+        if tag_name is None:
+            self.error_message(f"Failed to patch {dep_name}")
+            return
+        else:
+            self.local_tags[dep_name].insert(0, tag_name)
+            self.table.setItem(self.row_for_dependencies[dep_name], 2, QTableWidgetItem(tag_name))
+            remote_tag = self.table.item(self.row_for_dependencies[dep_name], 1).text()
+            self.table.setItem(self.row_for_dependencies[dep_name], 3, QTableWidgetItem(self.get_status(remote_tag, tag_name)))
+            if item:
+                self.local_tag_list.insertItem(0, f" - {tag_name}")
+        
+        self.success_message(f"'{dep_name}' successfully patched")
 
     def on_minor(self):
         print("Minor clicked")

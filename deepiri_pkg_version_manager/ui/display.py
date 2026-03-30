@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QSplitter, QHeaderView,
     QMessageBox
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QEvent
 from rich import print as rprint
 from packaging.version import Version
 
@@ -44,6 +44,7 @@ class PackageManagerUI(QMainWindow):
         self.dependencies = self.dependency_registry.get_all()
         self.dep_list.addItems([dep.name for dep in self.dependencies])
         self.row_for_dependencies = {dep.name: index for index, dep in enumerate(self.dependencies)}
+        self.dep_list.viewport().installEventFilter(self)
         splitter.addWidget(self.dep_list)
 
         self.remote_tags = {}
@@ -63,6 +64,7 @@ class PackageManagerUI(QMainWindow):
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._apply_table_column_widths()
         self.load_dependency_data()
+        self.table.viewport().installEventFilter(self)
 
         tags_row = QWidget()
         tags_row_layout = QHBoxLayout(tags_row)
@@ -71,12 +73,14 @@ class PackageManagerUI(QMainWindow):
         local_col = QVBoxLayout()
         local_label = QLabel("Local tags")
         self.local_tag_list = QListWidget()
+        self.local_tag_list.viewport().installEventFilter(self)
         local_col.addWidget(local_label)
         local_col.addWidget(self.local_tag_list)
 
         remote_col = QVBoxLayout()
         remote_label = QLabel("Remote tags")
         self.remote_tag_list = QListWidget()
+        self.remote_tag_list.viewport().installEventFilter(self)
         remote_col.addWidget(remote_label)
         remote_col.addWidget(self.remote_tag_list)
 
@@ -136,6 +140,26 @@ class PackageManagerUI(QMainWindow):
         self.table.setColumnWidth(1, third)
         self.table.setColumnWidth(2, third)
         self.table.setColumnWidth(3, rest)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.MouseButtonPress:
+            if obj == self.dep_list.viewport() and not self.dep_list.indexAt(event.pos()).isValid():
+                self.dep_list.clearSelection()
+                self.dep_list.setCurrentItem(None)
+                return True
+            if obj == self.local_tag_list.viewport() and not self.local_tag_list.indexAt(event.pos()).isValid():
+                self.local_tag_list.clearSelection()
+                self.local_tag_list.setCurrentItem(None)
+                return True
+            if obj == self.remote_tag_list.viewport() and not self.remote_tag_list.indexAt(event.pos()).isValid():
+                self.remote_tag_list.clearSelection()
+                self.remote_tag_list.setCurrentItem(None)
+                return True
+            if obj == self.table.viewport() and not self.table.indexAt(event.pos()).isValid():
+                self.table.clearSelection()
+                self.table.setCurrentCell(-1, -1)
+                return True
+        return super().eventFilter(obj, event)
 
     def on_dependency_selected(self, current, previous):
         self.local_tag_list.clear()
@@ -221,7 +245,7 @@ class PackageManagerUI(QMainWindow):
         self.success_message(f"Tag '{tag_name}' pushed to '{dep_name}'")
 
     def on_remove_tag(self):
-        item = self.dep_list.current()
+        item = self.dep_list.currentItem()
         if item is None:
             result = prompt_remove(self, self.dependency_registry)
             if result is None:
@@ -254,9 +278,13 @@ class PackageManagerUI(QMainWindow):
         else:
             if tag_name in self.remote_tags[dep_name]:
                 self.remote_tags[dep_name].remove(tag_name)
+                self.remote_tag_list.takeItem(self.remote_tag_list.row(self.remote_tag_list.findItems(f" - {tag_name}", Qt.MatchFlag.MatchExactly)[0]))
+                self.table.setItem(self.row_for_dependencies[dep_name], 1, QTableWidgetItem(self.remote_tags[dep_name][0] if self.remote_tags[dep_name] else "None"))
             if tag_name in self.local_tags[dep_name]:
                 self.local_tags[dep_name].remove(tag_name)
-
+                self.local_tag_list.takeItem(self.local_tag_list.row(self.local_tag_list.findItems(f" - {tag_name}", Qt.MatchFlag.MatchExactly)[0]))
+                self.table.setItem(self.row_for_dependencies[dep_name], 2, QTableWidgetItem(self.local_tags[dep_name][0] if self.local_tags[dep_name] else "None"))
+            self.table.setItem(self.row_for_dependencies[dep_name], 3, QTableWidgetItem(self.get_status(self.table.item(self.row_for_dependencies[dep_name], 1).text(), self.table.item(self.row_for_dependencies[dep_name], 2).text())))
 
         self.success_message(f"Tag '{tag_name}' removed from '{dep_name}'")
 

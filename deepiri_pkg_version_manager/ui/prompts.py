@@ -160,7 +160,7 @@ def prompt_push(parent, dependency_mgr: DependencyRegistry, dep: str = None):
 
 def prompt_remove(parent, dependency_mgr: DependencyRegistry, dep: str = None):
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Add tag")
+    dlg.setWindowTitle("Remove tag")
     name_edit = QLineEdit()
     name_edit.setPlaceholderText("e.g. v0.0.0")
     form = QFormLayout()

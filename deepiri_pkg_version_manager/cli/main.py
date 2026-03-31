@@ -421,7 +421,7 @@ def check_valid_format(tag_name: str):
         return True
 
 
-def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistry, tag_name: Optional[str] = None, description: Optional[str] = None, color: Optional[str] = None):
+def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistry, tag_name: Optional[str] = None, description: str = "", color: Optional[str] = None):
     dep = registry.get(dependency)
     dep_path = dep.repo_path
 
@@ -446,10 +446,7 @@ def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistr
     else:
         rprint(f"[red]Error:[/red] Failed to add tag")
 
-    if description is not None:
-        output = run_git_command(['git', 'tag', '-a', tag_name, '-m', description], dep.repo_path)
-    else:
-        output = run_git_command(['git', 'tag', tag_name], dep.repo_path)
+    output = run_git_command(['git', 'tag', '-a', tag_name, '-m', description], dep.repo_path)
 
     if output is None:
         rprint(f"[red]Error:[/red] Failed to create tag '{tag_name} in {dependency}'")
@@ -457,12 +454,13 @@ def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistr
         rprint(f"[green]Created tag '{tag_name}' in '{dependency}' locally[/green]")
 
     rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {tag_name}[/green]")
+    return True
 
 @tag_app.command("add")
 def tag_add(
     dependency: str = typer.Argument(..., help="Dependency name"),
     tag_name: Optional[str] = typer.Argument(None, help="Tag name"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
+    description: str = typer.Option(..., "--description", "-d", help="Tag description"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
     """Add a tag to a dependency."""
@@ -470,7 +468,8 @@ def tag_add(
     registry = DependencyRegistry()
     if not dependency_tree_check(dependency, registry):
         raise typer.Exit(1)
-    create_tag(dependency, tag_mgr, registry, tag_name, description, color)
+    if not create_tag(dependency, tag_mgr, registry, tag_name, description, color):
+        raise typer.Exit(1)
 
 
 def push_sanitization(dependency: str, tag_name: str, dep_path: str):
@@ -505,12 +504,12 @@ def push_sanitization(dependency: str, tag_name: str, dep_path: str):
         return False
 
 
-def push_submodule(dependency: str, tag_name: str, dep_path: str):
+def push_submodule(dependency: str, tag_name: str, dep_path: str) -> bool:
     """Update dependency root if dependency is a submodule"""
     checkout = run_git_command(['git', 'checkout', tag_name], dep_path)
     if checkout is None:
         rprint(f"[red]Error:[/red] Failed to checkout tag '{tag_name}' in '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Checked out tag '{tag_name}' in '{dependency}'[/green]")
 
@@ -518,36 +517,38 @@ def push_submodule(dependency: str, tag_name: str, dep_path: str):
     add = run_git_command(['git', 'add', dep_path], main_path)
     if add is None:
         rprint(f"[red]Error:[/red] Failed to add changes in '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Added changes in '{dependency}' to main repository[/green]")
     
     commit = run_git_command(['git', 'commit', '-m', f"Update dependency '{dependency}' to tag '{tag_name}'"], main_path)
     if commit is None:
         rprint(f"[red]Error:[/red] Failed to commit changes in '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Committed changes in '{dependency}' to main repository[/green]")
         
     push = run_git_command(['git', 'push', 'origin', 'HEAD'], main_path)
     if push is None:
         rprint(f"[red]Error:[/red] Failed to push new version '{tag_name}' in '{dependency}' to main repository")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Pushed new version '{tag_name}' in '{dependency}' to main repository[/green]")
 
+    return True
 
-def push_tag(dependency: str, dep_path: str, tag_mgr: TagManager, tag_name: Optional[str] = None):
+
+def push_tag(dependency: str, dep_path: str, tag_mgr: TagManager, tag_name: Optional[str] = None) -> bool:
     is_repo = run_git_command(['git', 'rev-parse', '--is-inside-work-tree'], dep_path)
     if is_repo is None or is_repo != 'true':
         rprint(f"[red]Error:[/red] Dependency '{dependency}' is not a submodule or repository, cannot push tag")
-        raise typer.Exit(1)
+        return False
 
     if tag_name is None:
         local_tags = run_git_command(['git', 'tag', '--sort=-v:refname'], dep_path)
         if local_tags is None or local_tags.strip() == "":
             rprint(f"[red]Error:[/red] There are no tags to push in '{dependency}'")
-            raise typer.Exit(1)
+            return False
         elif local_tags.strip() != "":
             tag_name = local_tags.strip().split("\n")[0]
             rprint(f"[green]Pushing latest tag '{tag_name}' in '{dependency}'[/green]")
@@ -555,27 +556,29 @@ def push_tag(dependency: str, dep_path: str, tag_mgr: TagManager, tag_name: Opti
     exists_in_db = tag_mgr.check_tag_exists_in_dependency(dependency, tag_name)
     if not exists_in_db:
         rprint(f"[red]Error:[/red] Tag '{tag_name}' not found in dependency '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Tag '{tag_name}' exists in dependency '{dependency}'[/green]")
 
     exists_locally = run_git_command(['git', 'tag', '--list', tag_name], dep_path)
     if exists_locally is None or exists_locally.strip() == "":
         rprint(f"[red]Error:[/red] Tag '{tag_name}' not found locally in '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Tag '{tag_name}' exists locally in '{dependency}'[/green]")
 
     if not push_sanitization(dependency, tag_name, dep_path):
         rprint(f"[red]Error:[/red] Push sanitization failed")
-        raise typer.Exit(1)
+        return False
 
     output = run_git_command(['git', 'push', 'origin', tag_name], dep_path)
     if output is None:
         rprint(f"[red]Error:[/red] Failed to push tag '{tag_name}' to '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Pushed tag '{tag_name}' to '{dependency}'[/green]")
+
+    return True
 
 
 @tag_app.command("push")
@@ -591,9 +594,11 @@ def tag_push(
     dep_path = dep.repo_path
     if not dependency_tree_check(dependency, registry):
         raise typer.Exit(1)
-    push_tag(dependency, dep_path, tag_mgr, tag_name)
+    if not push_tag(dependency, dep_path, tag_mgr, tag_name):
+        raise typer.Exit(1)
     if dep.is_submodule:
-        push_submodule(dependency, tag_name, dep_path)
+        if not push_submodule(dependency, tag_name, dep_path):
+            raise typer.Exit(1)
 
 
 def remove_tag(dependency: str, tag_name: str, tag_mgr: TagManager, registry: DependencyRegistry):
@@ -605,28 +610,30 @@ def remove_tag(dependency: str, tag_name: str, tag_mgr: TagManager, registry: De
         rprint(f"[green]Removed tag '{tag_name}' from '{dependency}' in db[/green]")
     else:
         rprint(f"[red]Error:[/red] Tag or dependency not found")
-        raise typer.Exit(1)
+        return False
 
     remove_locally = run_git_command(['git', 'tag', '-d', tag_name], dep_path)
     if remove_locally is None:
         rprint(f"[red]Error:[/red] Failed to remove tag '{tag_name}' from '{dependency}'")
-        raise typer.Exit(1)
+        return False
     else:
         rprint(f"[green]Removed tag '{tag_name}' from '{dependency}' locally[/green]")
     
     check_remote = run_git_command(['git', 'ls-remote', '--tags', 'origin', tag_name], dep_path)
     if check_remote is None:
         rprint(f"[red]Error:[/red] Failed to check if tag '{tag_name}' exists remotely in '{dependency}'")
-        raise typer.Exit(1)
+        return False
     elif check_remote.strip() != "":
         delete = run_git_command(['git', 'push', 'origin', '--delete', tag_name], dep_path)
         if delete is None:
             rprint(f"[red]Error:[/red] Failed to delete tag '{tag_name}' from '{dependency}'")
-            raise typer.Exit(1)
+            return False
         else:
             rprint(f"[green]Deleted tag '{tag_name}' from '{dependency}'[/green]")
     else:
         rprint(f"[green]Tag '{tag_name}' does not exist remotely in '{dependency}'[/green]")
+
+    return True
 
 
 @tag_app.command("remove")
@@ -639,7 +646,8 @@ def tag_remove(
     registry = DependencyRegistry()
     if not dependency_tree_check(dependency, registry):
         raise typer.Exit(1)
-    remove_tag(dependency, tag_name, tag_mgr, registry)
+    if not remove_tag(dependency, tag_name, tag_mgr, registry):
+        raise typer.Exit(1)
 
 
 @tag_app.command("list")
@@ -680,33 +688,14 @@ def tag_list(
         console.print(table)
 
 
-def update_helper(dependency: str, tag_name: str, type: str, description: Optional[str] = None, color: Optional[str] = None):
-    tag_mgr = TagManager()
-    registry = DependencyRegistry()
-
-    dep = registry.get(dependency)
-    if not dep:
-        rprint(f"[red]Error:[/red] Dependency '{dependency}' not found")
-        raise typer.Exit(1)
-    
-    dep_path = dep.repo_path
-    if not clean_working_tree(dep_path):
-        rprint(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
-        raise typer.Exit(1)
-
-    check_db = tag_mgr.check_tag_exists_in_dependency(dependency, tag_name)
-    if not check_db:
-        rprint(f"[red]Error:[/red] Tag '{tag_name}' not found in dependency '{dependency}'")
-        raise typer.Exit(1)
+def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str, description: str = "", color: Optional[str] = None) -> str | None:
+    recent_local = run_git_command(['git', 'tag', '--sort=-v:refname'], dep_path)
+    if recent_local is None or recent_local.strip() == "":
+        rprint(f"[red]Error:[/red] No tags found in '{dependency}'")
+        return None
     else:
-        rprint(f"[green]Tag '{tag_name}' found in dependency '{dependency}'[/green]")
-
-    local_tag = run_git_command(['git', 'tag', '--list', tag_name], dep_path)
-    if local_tag is None or local_tag.strip() == "":
-        rprint(f"[red]Error:[/red] Tag '{tag_name}' not found locally in '{dependency}'")
-        raise typer.Exit(1)
-    else:
-        rprint(f"[green]Tag '{tag_name}' found locally in '{dependency}'[/green]")
+        tag_name = recent_local.strip().split("\n")[0]
+        rprint(f"[green]Recent local tag in '{dependency}' is '{recent_local}'[/green]")
 
     if type == "patch":
         tag = tag_name.split('.')
@@ -725,58 +714,74 @@ def update_helper(dependency: str, tag_name: str, type: str, description: Option
         new_tag = '.'.join(tag)
     else:
         rprint(f"[red]Error:[/red] Invalid type '{type}'")
-        raise typer.Exit(1)
+        return None
 
     tag_mgr.create_tag(name=new_tag, description=description, color=color)
     added = tag_mgr.add_tag_to_dependency(dependency, new_tag)
     if not added:
         rprint(f"[red]Error:[/red] Failed to add tag '{new_tag}' to '{dependency}'")
-        raise typer.Exit(1)
+        return None
     else:
         rprint(f"[green]Added tag '{new_tag}' to '{dependency}'[/green]")
 
-    if description is not None:
-        added_locally = run_git_command(['git', 'tag', '-a', new_tag, '-m', description], dep_path)
-    else:
-        added_locally = run_git_command(['git', 'tag', new_tag], dep_path)
+    added_locally = run_git_command(['git', 'tag', '-a', new_tag, '-m', description], dep_path)
 
     if added_locally is None:
         rprint(f"[red]Error:[/red] Failed to add tag '{new_tag}' locally in '{dependency}'")
-        raise typer.Exit(1)
+        return None
     else:
         rprint(f"[green]Added tag '{new_tag}' locally in '{dependency}'[/green]")
 
     rprint(f"[green]To add tag remotely run: dtm tag push {dependency} {new_tag}[/green]")
+    return new_tag
 
 
 @tag_app.command("patch")
 def tag_patch(
     dependency: str = typer.Argument(..., help="Dependency name"),
-    tag_name: str = typer.Argument(..., help="Tag name"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
+    description: str = typer.Option(..., "--description", "-d", help="Tag description"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
-    update_helper(dependency, tag_name, "patch", description, color)
+    tag_mgr = TagManager()
+    registry = DependencyRegistry()
+    
+    if not dependency_tree_check(dependency, registry):
+        raise typer.Exit(1)
+    dep_path = registry.get(dependency).repo_path
+    if update_helper(dependency, tag_mgr, dep_path, "patch", description, color) is None:
+        raise typer.Exit(1)
 
 
 @tag_app.command("minor")
 def tag_minor(
     dependency: str = typer.Argument(..., help="Dependency name"),
-    tag_name: str = typer.Argument(..., help="Tag name"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
+    description: str = typer.Option(..., "--description", "-d", help="Tag description"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
-    update_helper(dependency, tag_name, "minor", description, color)
+    tag_mgr = TagManager()
+    registry = DependencyRegistry()
+
+    if not dependency_tree_check(dependency, registry):
+        raise typer.Exit(1)
+    dep_path = registry.get(dependency).repo_path
+    if update_helper(dependency, tag_mgr, dep_path, "minor", description, color) is None:
+        raise typer.Exit(1)
 
 
 @tag_app.command("major")
 def tag_major(
     dependency: str = typer.Argument(..., help="Dependency name"),
-    tag_name: str = typer.Argument(..., help="Tag name"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
+    description: str = typer.Option(..., "--description", "-d", help="Tag description"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
-    update_helper(dependency, tag_name, "major", description, color)
+    tag_mgr = TagManager()
+    registry = DependencyRegistry()
+
+    if not dependency_tree_check(dependency, registry):
+        raise typer.Exit(1)
+    dep_path = registry.get(dependency).repo_path
+    if update_helper(dependency, tag_mgr, dep_path, "major", description, color) is None:
+        raise typer.Exit(1)
 
 
 @app.command("display")

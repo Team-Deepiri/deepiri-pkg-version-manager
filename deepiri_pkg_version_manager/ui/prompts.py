@@ -8,14 +8,14 @@ from deepiri_pkg_version_manager.cli.main import dependency_tree_check, check_va
 
 
 def prompt_add(parent, dependency_mgr: DependencyRegistry, dep: str = None) -> (
-    tuple[str, str, str | None] | tuple[str, str | None] | None
+    tuple[str, str, str] | tuple[str, str] | None
 ):
     dlg = QDialog(parent)
     dlg.setWindowTitle("Add tag")
     name_edit = QLineEdit()
     name_edit.setPlaceholderText("e.g. v0.0.0")
     desc_edit = QTextEdit()
-    desc_edit.setPlaceholderText("Optional")
+    desc_edit.setPlaceholderText("Required")
     desc_edit.setFixedHeight(80)
     form = QFormLayout()
     if dep is None:
@@ -60,6 +60,13 @@ def prompt_add(parent, dependency_mgr: DependencyRegistry, dep: str = None) -> (
                 "Please enter a valid tag name.",
             )
             return
+        if not desc_edit.toPlainText().strip():
+            QMessageBox.warning(
+                parent,
+                "Missing description",
+                "Please enter a tag description.",
+            )
+            return
         dlg.accept()
 
     buttons.accepted.connect(try_accept)
@@ -75,8 +82,7 @@ def prompt_add(parent, dependency_mgr: DependencyRegistry, dep: str = None) -> (
         dependency = dep_edit.text().strip()
     name = name_edit.text().strip()
 
-    desc_raw = desc_edit.toPlainText().strip()
-    description = desc_raw if desc_raw else None
+    description = desc_edit.toPlainText().strip()
 
     if dep is None:
         return dependency, name, description
@@ -227,7 +233,7 @@ def prompt_update(parent, dependency_mgr: DependencyRegistry, type: str, dep: st
     dlg = QDialog(parent)
     dlg.setWindowTitle(f"{type.capitalize()} tag")
     desc_edit = QTextEdit()
-    desc_edit.setPlaceholderText("Optional")
+    desc_edit.setPlaceholderText("Required")
     desc_edit.setFixedHeight(80)
     form = QFormLayout()
     if dep is None:
@@ -257,8 +263,15 @@ def prompt_update(parent, dependency_mgr: DependencyRegistry, type: str, dep: st
         if not check_tags_exist_locally(dependency_mgr.get(dep if dep is not None else dep_edit.text().strip()).repo_path):
             QMessageBox.warning(
                 parent,
-                "No tags found",
+                "Tag not found",
                 "Please add a tag to the dependency or select a dependency with tags.",
+            )
+            return
+        if not desc_edit.toPlainText().strip():
+            QMessageBox.warning(
+                parent,
+                "Missing description",
+                "Please enter a tag description.",
             )
             return
         dlg.accept()
@@ -275,8 +288,7 @@ def prompt_update(parent, dependency_mgr: DependencyRegistry, type: str, dep: st
     if dep is None:
         dependency = dep_edit.text().strip()
 
-    desc_raw = desc_edit.toPlainText().strip()
-    description = desc_raw if desc_raw else None
+    description = desc_edit.toPlainText().strip()
 
     if dep is None:
         return dependency,description

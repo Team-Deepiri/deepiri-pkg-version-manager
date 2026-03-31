@@ -421,7 +421,7 @@ def check_valid_format(tag_name: str):
         return True
 
 
-def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistry, tag_name: Optional[str] = None, description: Optional[str] = None, color: Optional[str] = None):
+def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistry, tag_name: Optional[str] = None, description: str = "", color: Optional[str] = None):
     dep = registry.get(dependency)
     dep_path = dep.repo_path
 
@@ -446,10 +446,7 @@ def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistr
     else:
         rprint(f"[red]Error:[/red] Failed to add tag")
 
-    if description is not None:
-        output = run_git_command(['git', 'tag', '-a', tag_name, '-m', description], dep.repo_path)
-    else:
-        output = run_git_command(['git', 'tag', tag_name], dep.repo_path)
+    output = run_git_command(['git', 'tag', '-a', tag_name, '-m', description], dep.repo_path)
 
     if output is None:
         rprint(f"[red]Error:[/red] Failed to create tag '{tag_name} in {dependency}'")
@@ -463,7 +460,7 @@ def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistr
 def tag_add(
     dependency: str = typer.Argument(..., help="Dependency name"),
     tag_name: Optional[str] = typer.Argument(None, help="Tag name"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
+    description: str = typer.Option(..., "--description", "-d", help="Tag description"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
     """Add a tag to a dependency."""
@@ -691,7 +688,7 @@ def tag_list(
         console.print(table)
 
 
-def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str, description: Optional[str] = None, color: Optional[str] = None) -> str | None:
+def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str, description: str = "", color: Optional[str] = None) -> str | None:
     recent_local = run_git_command(['git', 'tag', '--sort=-v:refname'], dep_path)
     if recent_local is None or recent_local.strip() == "":
         rprint(f"[red]Error:[/red] No tags found in '{dependency}'")
@@ -727,10 +724,7 @@ def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str
     else:
         rprint(f"[green]Added tag '{new_tag}' to '{dependency}'[/green]")
 
-    if description is not None:
-        added_locally = run_git_command(['git', 'tag', '-a', new_tag, '-m', description], dep_path)
-    else:
-        added_locally = run_git_command(['git', 'tag', new_tag], dep_path)
+    added_locally = run_git_command(['git', 'tag', '-a', new_tag, '-m', description], dep_path)
 
     if added_locally is None:
         rprint(f"[red]Error:[/red] Failed to add tag '{new_tag}' locally in '{dependency}'")
@@ -745,7 +739,7 @@ def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str
 @tag_app.command("patch")
 def tag_patch(
     dependency: str = typer.Argument(..., help="Dependency name"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
+    description: str = typer.Option(..., "--description", "-d", help="Tag description"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
     tag_mgr = TagManager()
@@ -761,7 +755,7 @@ def tag_patch(
 @tag_app.command("minor")
 def tag_minor(
     dependency: str = typer.Argument(..., help="Dependency name"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
+    description: str = typer.Option(..., "--description", "-d", help="Tag description"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
     tag_mgr = TagManager()
@@ -777,7 +771,7 @@ def tag_minor(
 @tag_app.command("major")
 def tag_major(
     dependency: str = typer.Argument(..., help="Dependency name"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="Tag description"),
+    description: str = typer.Option(..., "--description", "-d", help="Tag description"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
     tag_mgr = TagManager()

@@ -289,41 +289,13 @@ class PackageManagerUI(QMainWindow):
         self.success_message(f"Tag '{tag_name}' removed from '{dep_name}'")
 
     def on_patch(self):
-        item = self.dep_list.currentItem()
-        if not item:
-            result = prompt_update(self, self.dependency_registry, "patch")
-            if result is None:
-                return
-            dep_name, description = result
-        else:
-            dep_name = item.text()
-            if self.local_tags[dep_name] is None:
-                self.error_message("No local tags found for this dependency")
-                return
-            result = prompt_update(self, self.dependency_registry, "patch", dep=dep_name)
-            if result is None:
-                return
-            description = result
-
-        tag_name = update_helper(dep_name, self.tag_manager, self.dependency_registry.get(dep_name).repo_path, "patch", description)
-        if tag_name is None:
-            self.error_message(f"Failed to patch {dep_name}")
-            return
-        else:
-            self.local_tags[dep_name].insert(0, tag_name)
-            self.table.setItem(self.row_for_dependencies[dep_name], 2, QTableWidgetItem(tag_name))
-            remote_tag = self.table.item(self.row_for_dependencies[dep_name], 1).text()
-            self.table.setItem(self.row_for_dependencies[dep_name], 3, QTableWidgetItem(self.get_status(remote_tag, tag_name)))
-            if item:
-                self.local_tag_list.insertItem(0, f" - {tag_name}")
-        
-        self.success_message(f"'{dep_name}' successfully patched")
+        self.update("patch")
 
     def on_minor(self):
-        print("Minor clicked")
+        self.update("minor")
 
     def on_major(self):
-        print("Major clicked")
+        self.update("major")
 
     def load_dependency_data(self):
         self.table.setRowCount(len(self.dependencies))
@@ -350,7 +322,7 @@ class PackageManagerUI(QMainWindow):
             self.table.setItem(index, 3, QTableWidgetItem(self.get_status(remote_tag, local_tag)))
 
     def get_status(self, remote_tag, local_tag) -> str:
-        if (remote_tag == "None" and local_tag == "None") or (Version(remote_tag) == Version(local_tag)):
+        if remote_tag == "None" and local_tag == "None":
             return "Up to date"
         elif remote_tag == "None" and local_tag != "None":
             return "Ahead"
@@ -360,6 +332,8 @@ class PackageManagerUI(QMainWindow):
             return "Behind"
         elif Version(remote_tag) < Version(local_tag):
             return "Ahead"
+        else:
+            return "Up to date"
 
     def get_local_tags(self, dep_name, repo_path):
         output = run_git_command(['git', 'tag', '--sort=-v:refname'], repo_path)
@@ -384,6 +358,37 @@ class PackageManagerUI(QMainWindow):
         else:
             rprint('[green]Remote tags fetched successfully[/green]')
             return [tag.split('refs/tags/')[1] for tag in output.strip().split('\n')]
+
+    def update(self, type: str):
+        item = self.dep_list.currentItem()
+        if not item:
+            result = prompt_update(self, self.dependency_registry, type)
+            if result is None:
+                return
+            dep_name, description = result
+        else:
+            dep_name = item.text()
+            if self.local_tags[dep_name] is None:
+                self.error_message("No local tags found for this dependency")
+                return
+            result = prompt_update(self, self.dependency_registry, type, dep=dep_name)
+            if result is None:
+                return
+            description = result
+
+        tag_name = update_helper(dep_name, self.tag_manager, self.dependency_registry.get(dep_name).repo_path, type, description)
+        if tag_name is None:
+            self.error_message(f"Failed to patch {dep_name}")
+            return
+        else:
+            self.local_tags[dep_name].insert(0, tag_name)
+            self.table.setItem(self.row_for_dependencies[dep_name], 2, QTableWidgetItem(tag_name))
+            remote_tag = self.table.item(self.row_for_dependencies[dep_name], 1).text()
+            self.table.setItem(self.row_for_dependencies[dep_name], 3, QTableWidgetItem(self.get_status(remote_tag, tag_name)))
+            if item:
+                self.local_tag_list.insertItem(0, f" - {tag_name}")
+        
+        self.success_message(f"'{dep_name}' successfully updated")
 
     def success_message(self, message: str) -> None:
         QMessageBox.information(

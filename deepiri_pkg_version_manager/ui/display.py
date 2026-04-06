@@ -305,6 +305,7 @@ class PackageManagerUI(QMainWindow):
                 remote_tag = "None"
                 self.remote_tags[dep.name] = []
             else:
+                remote_tags = [tag for tag in remote_tags if "^{}" not in tag]
                 remote_tag = remote_tags[0]
                 self.remote_tags[dep.name] = remote_tags
 
@@ -313,6 +314,7 @@ class PackageManagerUI(QMainWindow):
                 local_tag = "None"
                 self.local_tags[dep.name] = []
             else:
+                local_tags = [tag for tag in local_tags if "^{}" not in tag]
                 local_tag = local_tags[0]
                 self.local_tags[dep.name] = local_tags
 

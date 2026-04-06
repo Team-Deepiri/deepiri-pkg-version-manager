@@ -786,8 +786,7 @@ def tag_major(
 
 @app.command("display")
 def ui():
-    """Launch animated TUI."""
-    rprint("[yellow]TUI not yet implemented. Use CLI commands instead.[/yellow]")
+    """Launch UI."""
     import sys
     from PySide6.QtWidgets import QApplication
     from deepiri_pkg_version_manager.ui.display import PackageManagerUI

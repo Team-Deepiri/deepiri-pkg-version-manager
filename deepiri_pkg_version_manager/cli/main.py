@@ -504,40 +504,6 @@ def push_sanitization(dependency: str, tag_name: str, dep_path: str):
         return False
 
 
-def push_submodule(dependency: str, tag_name: str, dep_path: str) -> bool:
-    """Update dependency root if dependency is a submodule"""
-    checkout = run_git_command(['git', 'checkout', tag_name], dep_path)
-    if checkout is None:
-        rprint(f"[red]Error:[/red] Failed to checkout tag '{tag_name}' in '{dependency}'")
-        return False
-    else:
-        rprint(f"[green]Checked out tag '{tag_name}' in '{dependency}'[/green]")
-
-    main_path = Path(__file__).parent.parent / "deepiri-platform"
-    add = run_git_command(['git', 'add', dep_path], main_path)
-    if add is None:
-        rprint(f"[red]Error:[/red] Failed to add changes in '{dependency}'")
-        return False
-    else:
-        rprint(f"[green]Added changes in '{dependency}' to main repository[/green]")
-    
-    commit = run_git_command(['git', 'commit', '-m', f"Update dependency '{dependency}' to tag '{tag_name}'"], main_path)
-    if commit is None:
-        rprint(f"[red]Error:[/red] Failed to commit changes in '{dependency}'")
-        return False
-    else:
-        rprint(f"[green]Committed changes in '{dependency}' to main repository[/green]")
-        
-    push = run_git_command(['git', 'push', 'origin', 'HEAD'], main_path)
-    if push is None:
-        rprint(f"[red]Error:[/red] Failed to push new version '{tag_name}' in '{dependency}' to main repository")
-        return False
-    else:
-        rprint(f"[green]Pushed new version '{tag_name}' in '{dependency}' to main repository[/green]")
-
-    return True
-
-
 def push_tag(dependency: str, dep_path: str, tag_mgr: TagManager, tag_name: Optional[str] = None) -> bool:
     is_repo = run_git_command(['git', 'rev-parse', '--is-inside-work-tree'], dep_path)
     if is_repo is None or is_repo != 'true':
@@ -596,9 +562,6 @@ def tag_push(
         raise typer.Exit(1)
     if not push_tag(dependency, dep_path, tag_mgr, tag_name):
         raise typer.Exit(1)
-    if dep.is_submodule:
-        if not push_submodule(dependency, tag_name, dep_path):
-            raise typer.Exit(1)
 
 
 def remove_tag(dependency: str, tag_name: str, tag_mgr: TagManager, registry: DependencyRegistry):

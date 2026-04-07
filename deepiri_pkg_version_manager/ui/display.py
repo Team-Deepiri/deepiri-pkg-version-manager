@@ -13,7 +13,7 @@ from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push, prom
 
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag, push_tag, push_submodule, remove_tag, update_helper
+from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag, push_tag, remove_tag, update_helper
 
 
 class PackageManagerUI(QMainWindow):
@@ -236,11 +236,6 @@ class PackageManagerUI(QMainWindow):
             self.table.setItem(self.row_for_dependencies[dep_name], 3, QTableWidgetItem(self.get_status(tag_name, local_tag)))
             if item:
                 self.remote_tag_list.insertItem(0, f" - {tag_name}")
-
-        if dep.is_submodule:
-            if not push_submodule(dep_name, tag_name, dep.repo_path):
-                self.error_message("Failed to push new tag to submodule parent")
-                return
 
         self.success_message(f"Tag '{tag_name}' pushed to '{dep_name}'")
 

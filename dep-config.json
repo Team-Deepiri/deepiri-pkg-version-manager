@@ -1,0 +1,90 @@
+{
+    "deepiri-core-api": {
+        "repo": "Team-Deepiri/deepiri-core-api",
+        "dependents": {
+            "repo": "Team-Deepiri/deepiri-platform",
+            "type": "submodule",
+            "path": "deepiri-core-api"
+        }
+    },
+    "deepiri-modelkit": {
+        "repo": "Team-Deepiri/deepiri-modelkit",
+        "dependents": {
+            "repo": "Team-Deepiri/deepiri-platform",
+            "type": "submodule",
+            "path": "deepiri-modelkit"
+        }
+    },
+    "deepiri-web-frontend": {
+        "repo": "Team-Deepiri/deepiri-web-frontend",
+        "dependents": {
+            "repo": "Team-Deepiri/deepiri-platform",
+            "type": "submodule",
+            "path": "deepiri-web-frontend"
+        }
+    },
+    "diri-cyrex": {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "dependents": {
+            "repo": "Team-Deepiri/deepiri-platform",
+            "type": "submodule",
+            "path": "diri-cyrex"
+        }
+    },
+    "diri-helox": {
+        "repo": "Team-Deepiri/diri-helox",
+        "dependents": {
+            "repo": "Team-Deepiri/deepiri-platform",
+            "type": "submodule",
+            "path": "diri-helox"
+        }
+    },
+    "diri-persola": {
+        "repo": "Team-Deepiri/diri-persola",
+        "dependents": {
+            "repo": "Team-Deepiri/deepiri-platform",
+            "type": "submodule",
+            "path": "diri-persola"
+        }
+    },
+    "deepiri-api-gateway": {
+        "repo": "Team-Deepiri/deepiri-api-gateway",
+        "dependents": {
+            "repo": "Team-Deepiri/deepiri-platform",
+            "type": "submodule",
+            "path": "platform-services/backend/deepiri-api-gateway"
+        }
+    },
+    "deepiri-auth-service": {
+        "repo": "Team-Deepiri/deepiri-auth-service",
+        "dependents": {
+            "repo": "Team-Deepiri/deepiri-platform",
+            "type": "submodule",
+            "path": "platform-services/backend/deepiri-auth-service"
+        }
+    },
+    "deepiri-external-bridge-service": {
+        "repo": "Team-Deepiri/deepiri-external-bridge-service",
+        "dependents": {
+            "repo": "Team-Deepiri/deepiri-platform",
+            "type": "submodule",
+            "path": "platform-services/backend/deepiri-external-bridge-service"
+        }
+    },
+    "deepiri-language-intelligence-service": {
+        "repo": "Team-Deepiri/deepiri-language-intelligence-service",
+        "dependents": {
+            "repo": "Team-Deepiri/deepiri-platform",
+            "type": "submodule",
+            "path": "platform-services/backend/deepiri-language-intelligence-service"
+        }
+    },
+    "deepiri-prismpipe": {
+        "repo": "Team-Deepiri/deepiri-prismpipe",
+        "dependents": {
+            "repo": "Team-Deepiri/deepiri-platform",
+            "type": "submodule",
+            "path": "platform-services/backend/deepiri-prismpipe"
+        }
+    }
+}

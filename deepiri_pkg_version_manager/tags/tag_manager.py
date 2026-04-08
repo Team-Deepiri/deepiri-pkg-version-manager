@@ -111,6 +111,15 @@ class TagManager:
         
         return [self._db_to_model(db) for db in tag_dbs]
 
+    def check_tag_exists_in_dependency(self, dep_name: str, tag_name: str) -> bool:
+        dep_db = self.session.query(DependencyDB).filter_by(name=dep_name).first()
+        tag_db = self.session.query(TagDB).filter_by(name=tag_name).first()
+        
+        if not dep_db or not tag_db:
+            return False
+        
+        return self.session.query(DependencyTagDB).filter_by(dependency_id=dep_db.id, tag_id=tag_db.id).first() is not None
+
     def delete_tag(self, name: str) -> bool:
         db = self.session.query(TagDB).filter_by(name=name).first()
         if db:

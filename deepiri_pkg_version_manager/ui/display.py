@@ -13,7 +13,7 @@ from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push, prom
 
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag, push_tag, push_submodule, remove_tag, update_helper
+from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag, push_tag, remove_tag, update_helper
 
 
 class PackageManagerUI(QMainWindow):
@@ -237,11 +237,6 @@ class PackageManagerUI(QMainWindow):
             if item:
                 self.remote_tag_list.insertItem(0, f" - {tag_name}")
 
-        if dep.is_submodule:
-            if not push_submodule(dep_name, tag_name, dep.repo_path):
-                self.error_message("Failed to push new tag to submodule parent")
-                return
-
         self.success_message(f"Tag '{tag_name}' pushed to '{dep_name}'")
 
     def on_remove_tag(self):
@@ -305,6 +300,7 @@ class PackageManagerUI(QMainWindow):
                 remote_tag = "None"
                 self.remote_tags[dep.name] = []
             else:
+                remote_tags = [tag for tag in remote_tags if "^{}" not in tag]
                 remote_tag = remote_tags[0]
                 self.remote_tags[dep.name] = remote_tags
 
@@ -313,6 +309,7 @@ class PackageManagerUI(QMainWindow):
                 local_tag = "None"
                 self.local_tags[dep.name] = []
             else:
+                local_tags = [tag for tag in local_tags if "^{}" not in tag]
                 local_tag = local_tags[0]
                 self.local_tags[dep.name] = local_tags
 

@@ -478,7 +478,6 @@ def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistr
     else:
         logging.info(f"[green]Created tag '{tag_name}' in '{dependency}' locally[/green]")
 
-    rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {tag_name}[/green]")
     return True
 
 @tag_app.command("add")
@@ -497,6 +496,8 @@ def tag_add(
     if not create_tag(dependency, tag_mgr, registry, tag_name, description, color):
         rprint(f"[red]Error:[/red] Check logs for more information")
         raise typer.Exit(1)
+
+    rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {tag_name}[/green]")
 
 
 def push_sanitization(dependency: str, tag_name: str, dep_path: str):
@@ -581,17 +582,20 @@ def tag_push(
     tag_name: Optional[str] = typer.Argument(None, help="Tag name")
 ):
     """Push a tag to a dependency."""
-    tag_mgr = TagManager()
-    registry = DependencyRegistry()
+    with console.status("[green]Pushing tag...[/green]"):
+        tag_mgr = TagManager()
+        registry = DependencyRegistry()
 
-    dep = registry.get(dependency)
-    dep_path = dep.repo_path
-    if not dependency_tree_check(dependency, registry):
-        rprint(f"[red]Error:[/red] Check logs for more information")
-        raise typer.Exit(1)
-    if not push_tag(dependency, dep_path, tag_mgr, tag_name):
-        rprint(f"[red]Error:[/red] Check logs for more information")
-        raise typer.Exit(1)
+        dep = registry.get(dependency)
+        dep_path = dep.repo_path
+        if not dependency_tree_check(dependency, registry):
+            console.log(f"[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
+        if not push_tag(dependency, dep_path, tag_mgr, tag_name):
+            console.log(f"[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
+    
+    rprint(f"[green]Tag '{tag_name}' pushed to '{dependency}'[/green]")
 
 
 def remove_tag(dependency: str, tag_name: str, tag_mgr: TagManager, registry: DependencyRegistry):
@@ -636,14 +640,17 @@ def tag_remove(
     tag_name: str = typer.Argument(..., help="Tag name"),
 ):
     """Remove a tag from a dependency."""
-    tag_mgr = TagManager()
-    registry = DependencyRegistry()
-    if not dependency_tree_check(dependency, registry):
-        rprint(f"[red]Error:[/red] Check logs for more information")
-        raise typer.Exit(1)
-    if not remove_tag(dependency, tag_name, tag_mgr, registry):
-        rprint(f"[red]Error:[/red] Check logs for more information")
-        raise typer.Exit(1)
+    with console.status("[green]Removing tag...[/green]"):
+        tag_mgr = TagManager()
+        registry = DependencyRegistry()
+        if not dependency_tree_check(dependency, registry):
+            console.log(f"[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
+        if not remove_tag(dependency, tag_name, tag_mgr, registry):
+            console.log(f"[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
+
+    rprint(f"[green]Tag '{tag_name}' removed from '{dependency}'[/green]")
 
 
 @tag_app.command("list")
@@ -728,7 +735,7 @@ def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str
     else:
         logging.info(f"[green]Added tag '{new_tag}' locally in '{dependency}'[/green]")
 
-    logging.info(f"[green]To add tag remotely run: dtm tag push {dependency} {new_tag}[/green]")
+    logging.info(f"[green]To push tag remotely run: dtm tag push {dependency} {new_tag}[/green]")
     return new_tag
 
 
@@ -738,16 +745,19 @@ def tag_patch(
     description: str = typer.Option(..., "--description", "-d", help="Tag description"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
-    tag_mgr = TagManager()
-    registry = DependencyRegistry()
-    
-    if not dependency_tree_check(dependency, registry):
-        rprint(f"[red]Error:[/red] Check logs for more information")
-        raise typer.Exit(1)
-    dep_path = registry.get(dependency).repo_path
-    if update_helper(dependency, tag_mgr, dep_path, "patch", description, color) is None:
-        rprint(f"[red]Error:[/red] Check logs for more information")
-        raise typer.Exit(1)
+    with console.status("[green]Updating dependency tag with patch...[/green]"):
+        tag_mgr = TagManager()
+        registry = DependencyRegistry()
+        
+        if not dependency_tree_check(dependency, registry):
+            rprint(f"[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
+        dep_path = registry.get(dependency).repo_path
+        if update_helper(dependency, tag_mgr, dep_path, "patch", description, color) is None:
+            rprint(f"[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
+
+    rprint(f"[green]Dependency tag updated successfully[/green]")
 
 
 @tag_app.command("minor")
@@ -756,16 +766,19 @@ def tag_minor(
     description: str = typer.Option(..., "--description", "-d", help="Tag description"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
-    tag_mgr = TagManager()
-    registry = DependencyRegistry()
+    with console.status("[green]Updating dependency tag with minor bump...[/green]"):
+        tag_mgr = TagManager()
+        registry = DependencyRegistry()
 
-    if not dependency_tree_check(dependency, registry):
-        rprint(f"[red]Error:[/red] Check logs for more information")
-        raise typer.Exit(1)
-    dep_path = registry.get(dependency).repo_path
-    if update_helper(dependency, tag_mgr, dep_path, "minor", description, color) is None:
-        rprint(f"[red]Error:[/red] Check logs for more information")
-        raise typer.Exit(1)
+        if not dependency_tree_check(dependency, registry):
+            rprint(f"[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
+        dep_path = registry.get(dependency).repo_path
+        if update_helper(dependency, tag_mgr, dep_path, "minor", description, color) is None:
+            rprint(f"[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
+
+    rprint(f"[green]Dependency tag updated successfully[/green]")
 
 
 @tag_app.command("major")
@@ -774,16 +787,19 @@ def tag_major(
     description: str = typer.Option(..., "--description", "-d", help="Tag description"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
-    tag_mgr = TagManager()
-    registry = DependencyRegistry()
+    with console.status("[green]Updating dependency tag with major bump...[/green]"):
+        tag_mgr = TagManager()
+        registry = DependencyRegistry()
 
-    if not dependency_tree_check(dependency, registry):
-        rprint(f"[red]Error:[/red] Check logs for more information")
-        raise typer.Exit(1)
-    dep_path = registry.get(dependency).repo_path
-    if update_helper(dependency, tag_mgr, dep_path, "major", description, color) is None:
-        rprint(f"[red]Error:[/red] Check logs for more information")
-        raise typer.Exit(1)
+        if not dependency_tree_check(dependency, registry):
+            rprint(f"[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
+        dep_path = registry.get(dependency).repo_path
+        if update_helper(dependency, tag_mgr, dep_path, "major", description, color) is None:
+            rprint(f"[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
+
+    rprint(f"[green]Dependency tag updated successfully[/green]")
 
 
 @app.command("display")

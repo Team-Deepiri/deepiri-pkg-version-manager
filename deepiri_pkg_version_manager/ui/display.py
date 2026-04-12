@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QEvent
 from rich import print as rprint
+from rich.console import Console
 from packaging.version import Version
 
 from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push, prompt_remove, prompt_update
@@ -18,109 +19,114 @@ from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tre
 import logging
 logger = logging.getLogger(__name__)
 
+console = Console()
+
 
 class PackageManagerUI(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Deepiri Package Version Manager")
-        self.setGeometry(100, 100, 1000, 600)
+        with console.status("[green]Launching UI...[/green]"):
+            self.setWindowTitle("Deepiri Package Version Manager")
+            self.setGeometry(100, 100, 1000, 600)
 
-        self.tag_manager = TagManager()
-        self.dependency_registry = DependencyRegistry()
+            self.tag_manager = TagManager()
+            self.dependency_registry = DependencyRegistry()
 
-        main_widget = QWidget()
-        main_layout = QVBoxLayout()
+            main_widget = QWidget()
+            main_layout = QVBoxLayout()
 
-        button_layout = QHBoxLayout()
-        self.add_tag_btn = QPushButton("Add Tag")
-        self.push_tag_btn = QPushButton("Push Tag")
-        self.remove_tag_btn = QPushButton("Remove Tag")
+            button_layout = QHBoxLayout()
+            self.add_tag_btn = QPushButton("Add Tag")
+            self.push_tag_btn = QPushButton("Push Tag")
+            self.remove_tag_btn = QPushButton("Remove Tag")
 
-        button_layout.addWidget(self.add_tag_btn)
-        button_layout.addWidget(self.push_tag_btn)
-        button_layout.addWidget(self.remove_tag_btn)
+            button_layout.addWidget(self.add_tag_btn)
+            button_layout.addWidget(self.push_tag_btn)
+            button_layout.addWidget(self.remove_tag_btn)
 
-        splitter = QSplitter(Qt.Horizontal)
+            splitter = QSplitter(Qt.Horizontal)
 
-        self.dep_list = QListWidget()
-        self.dependencies = self.dependency_registry.get_all()
-        self.dep_list.addItems([dep.name for dep in self.dependencies])
-        self.row_for_dependencies = {dep.name: index for index, dep in enumerate(self.dependencies)}
-        self.dep_list.viewport().installEventFilter(self)
-        splitter.addWidget(self.dep_list)
+            self.dep_list = QListWidget()
+            self.dependencies = self.dependency_registry.get_all()
+            self.dep_list.addItems([dep.name for dep in self.dependencies])
+            self.row_for_dependencies = {dep.name: index for index, dep in enumerate(self.dependencies)}
+            self.dep_list.viewport().installEventFilter(self)
+            splitter.addWidget(self.dep_list)
 
-        self.remote_tags = {}
-        self.local_tags = {}
+            self.remote_tags = {}
+            self.local_tags = {}
 
-        right_panel = QWidget()
-        right_layout = QVBoxLayout()
+            right_panel = QWidget()
+            right_layout = QVBoxLayout()
 
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels([
-            "Name", "Remote Version", "Local Version", "Status"
-        ])
-        table_header = self.table.horizontalHeader()
-        table_header.setSectionsMovable(False)
-        for col in range(4):
-            table_header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
-        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._apply_table_column_widths()
-        self.load_dependency_data()
-        self.table.viewport().installEventFilter(self)
+            self.table = QTableWidget(0, 4)
+            self.table.setHorizontalHeaderLabels([
+                "Name", "Remote Version", "Local Version", "Status"
+            ])
+            table_header = self.table.horizontalHeader()
+            table_header.setSectionsMovable(False)
+            for col in range(4):
+                table_header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
+            self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self._apply_table_column_widths()
+            self.load_dependency_data()
+            self.table.viewport().installEventFilter(self)
 
-        tags_row = QWidget()
-        tags_row_layout = QHBoxLayout(tags_row)
-        tags_row_layout.setContentsMargins(0, 0, 0, 0)
+            tags_row = QWidget()
+            tags_row_layout = QHBoxLayout(tags_row)
+            tags_row_layout.setContentsMargins(0, 0, 0, 0)
 
-        local_col = QVBoxLayout()
-        local_label = QLabel("Local tags")
-        self.local_tag_list = QListWidget()
-        self.local_tag_list.viewport().installEventFilter(self)
-        local_col.addWidget(local_label)
-        local_col.addWidget(self.local_tag_list)
+            local_col = QVBoxLayout()
+            local_label = QLabel("Local tags")
+            self.local_tag_list = QListWidget()
+            self.local_tag_list.viewport().installEventFilter(self)
+            local_col.addWidget(local_label)
+            local_col.addWidget(self.local_tag_list)
 
-        remote_col = QVBoxLayout()
-        remote_label = QLabel("Remote tags")
-        self.remote_tag_list = QListWidget()
-        self.remote_tag_list.viewport().installEventFilter(self)
-        remote_col.addWidget(remote_label)
-        remote_col.addWidget(self.remote_tag_list)
+            remote_col = QVBoxLayout()
+            remote_label = QLabel("Remote tags")
+            self.remote_tag_list = QListWidget()
+            self.remote_tag_list.viewport().installEventFilter(self)
+            remote_col.addWidget(remote_label)
+            remote_col.addWidget(self.remote_tag_list)
 
-        tags_row_layout.addLayout(local_col, 1)
-        tags_row_layout.addLayout(remote_col, 1)
+            tags_row_layout.addLayout(local_col, 1)
+            tags_row_layout.addLayout(remote_col, 1)
 
-        bump_row = QHBoxLayout()
-        bump_row.setContentsMargins(0, 0, 0, 0)
-        self.patch_btn = QPushButton("Patch")
-        self.minor_btn = QPushButton("Minor")
-        self.major_btn = QPushButton("Major")
-        bump_row.addWidget(self.patch_btn)
-        bump_row.addWidget(self.minor_btn)
-        bump_row.addWidget(self.major_btn)
+            bump_row = QHBoxLayout()
+            bump_row.setContentsMargins(0, 0, 0, 0)
+            self.patch_btn = QPushButton("Patch")
+            self.minor_btn = QPushButton("Minor")
+            self.major_btn = QPushButton("Major")
+            bump_row.addWidget(self.patch_btn)
+            bump_row.addWidget(self.minor_btn)
+            bump_row.addWidget(self.major_btn)
 
-        right_layout.addWidget(self.table)
-        right_layout.addWidget(tags_row)
-        right_layout.addLayout(bump_row)
+            right_layout.addWidget(self.table)
+            right_layout.addWidget(tags_row)
+            right_layout.addLayout(bump_row)
 
-        right_panel.setLayout(right_layout)
-        splitter.addWidget(right_panel)
+            right_panel.setLayout(right_layout)
+            splitter.addWidget(right_panel)
 
-        splitter.setStretchFactor(1, 3)
+            splitter.setStretchFactor(1, 3)
 
-        main_layout.addLayout(button_layout)
-        main_layout.addWidget(splitter)
+            main_layout.addLayout(button_layout)
+            main_layout.addWidget(splitter)
 
-        main_widget.setLayout(main_layout)
-        self.setCentralWidget(main_widget)
+            main_widget.setLayout(main_layout)
+            self.setCentralWidget(main_widget)
 
-        self.dep_list.currentItemChanged.connect(self.on_dependency_selected)
-        self.add_tag_btn.clicked.connect(self.on_add_tag)
-        self.push_tag_btn.clicked.connect(self.on_push_tag)
-        self.remove_tag_btn.clicked.connect(self.on_remove_tag)
-        self.patch_btn.clicked.connect(self.on_patch)
-        self.minor_btn.clicked.connect(self.on_minor)
-        self.major_btn.clicked.connect(self.on_major)
+            self.dep_list.currentItemChanged.connect(self.on_dependency_selected)
+            self.add_tag_btn.clicked.connect(self.on_add_tag)
+            self.push_tag_btn.clicked.connect(self.on_push_tag)
+            self.remove_tag_btn.clicked.connect(self.on_remove_tag)
+            self.patch_btn.clicked.connect(self.on_patch)
+            self.minor_btn.clicked.connect(self.on_minor)
+            self.major_btn.clicked.connect(self.on_major)
+            
+        rprint("[green]UI launched successfully[/green]")
 
     def showEvent(self, event):
         super().showEvent(event)

@@ -22,6 +22,7 @@ dtm install <package>
 | Command | Description | Usage |
 |------|--------------|---------|
 | `scan` | Scan repositories and build the dependency graph database. | `dtm scan --path ../deepiri-platform` |
+| `clear` | Clear dependencies from the dependency database. | `dtm clear` |
 | `deps` | List all dependencies, or show details for one dependency. | `dtm deps` / `dtm deps deepiri-pkg-version-manager --tags` |
 | `graph` | Display the dependency tree or query dependencies/dependents. | `dtm graph` / `dtm graph --root deepiri-pkg-version-manager` |
 | `install` | Generate install commands for one dependency or all dependencies. | `dtm install deepiri-pkg-version-manager --dry-run` |

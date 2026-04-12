@@ -1,3 +1,4 @@
+import sys
 import json
 import typer
 import subprocess
@@ -9,6 +10,7 @@ from rich.table import Table
 from rich import print as rprint
 from rich.syntax import Syntax
 from packaging.version import Version
+from PySide6.QtWidgets import QApplication
 
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
@@ -78,6 +80,13 @@ def scan(
         console.print("[green]Saved to database[/green]")
     
     return scanned
+
+
+@app.command("clear")
+def clear_db():
+    registry = DependencyRegistry()
+    registry.clear_all()
+    console.print("[green]Database cleared[/green]")
 
 
 @app.command("deps")
@@ -195,6 +204,13 @@ def graph(
     
     tree = g.to_tree_string(root=root)
     console.print(f"\n[bold]Dependency Tree:[/bold]\n{tree}")
+
+    from deepiri_pkg_version_manager.ui.graphDisplay import DependencyGraphView
+
+    app = QApplication(sys.argv)
+    window = DependencyGraphView(g, root=root)
+    window.show()
+    sys.exit(app.exec())
 
 
 @app.command()
@@ -750,8 +766,6 @@ def tag_major(
 @app.command("display")
 def ui():
     """Launch UI."""
-    import sys
-    from PySide6.QtWidgets import QApplication
     from deepiri_pkg_version_manager.ui.display import PackageManagerUI
 
     app = QApplication(sys.argv)

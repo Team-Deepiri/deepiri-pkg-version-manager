@@ -15,6 +15,9 @@ from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
 from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag, push_tag, remove_tag, update_helper
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class PackageManagerUI(QMainWindow):
     def __init__(self):
@@ -335,25 +338,25 @@ class PackageManagerUI(QMainWindow):
     def get_local_tags(self, dep_name, repo_path):
         output = run_git_command(['git', 'tag', '--sort=-v:refname'], repo_path)
         if output is None:
-            rprint(f"[red]Error:[/red] Failed to get local tags for '{dep_name}'")
+            logger.error(f"[red]Error:[/red] Failed to get local tags for '{dep_name}'")
             return None
         elif output.strip() == "":
-            print(f"No local tags found for '{dep_name}'")
+            logger.info(f"No local tags found for '{dep_name}'")
             return None
         else:
-            rprint('[green]Local tags fetched successfully[/green]')
+            logger.info(f'[green]Local tags in {dep_name} fetched successfully[/green]')
             return [tag for tag in output.strip().split('\n')]
 
     def get_remote_tags(self, dep_name, repo_path):
         output = run_git_command(['git', 'ls-remote', '--tags', '--sort=-v:refname', 'origin'], repo_path)
         if output is None:
-            rprint(f"[red]Error:[/red] Failed to get remote tags for '{dep_name}'")
+            logger.error(f"[red]Error:[/red] Failed to get remote tags for '{dep_name}'")
             return None
         elif output.strip() == "":
-            print(f"No remote tags found for '{dep_name}'")
+            logger.info(f"No remote tags found for '{dep_name}'")
             return None
         else:
-            rprint('[green]Remote tags fetched successfully[/green]')
+            logger.info(f'[green]Remote tags in {dep_name} fetched successfully[/green]')
             return [tag.split('refs/tags/')[1] for tag in output.strip().split('\n')]
 
     def update(self, type: str):
@@ -398,5 +401,5 @@ class PackageManagerUI(QMainWindow):
         QMessageBox.warning(
             self,
             "Error",
-            message,
+            f"{message}\nCheck logs for more information",
         )

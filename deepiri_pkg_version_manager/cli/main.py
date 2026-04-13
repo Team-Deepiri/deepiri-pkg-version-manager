@@ -411,6 +411,69 @@ def check_valid_format(tag_name: str):
         return True
 
 
+def update_pyproject_version(repo_path: str, version: str):
+    import toml
+
+    pyproject_path = os.path.join(repo_path, "pyproject.toml")
+    data = toml.load(pyproject_path)
+
+    if "project" in data and "version" in data["project"]:
+        data["project"]["version"] = version
+    elif "tool" in data and "poetry" in data["tool"]:
+        data["tool"]["poetry"]["version"] = version
+    else:
+        logging.error(f"[red]Error:[/red] No version field found in pyproject.toml")
+        return False
+
+    with open(pyproject_path, "w") as f:
+        toml.dump(data, f)
+
+    logging.info(f"[green]Updated version to '{version}' in pyproject.toml[/green]")
+    return True
+
+
+def bump_version(dep, version: str):
+    if dep.package_type == "npm":
+        output = run_command(['npm', 'version', version.strip('v'), '--no-git-tag-version'], dep.repo_path) 
+        if output is None:
+            logging.error(f"[red]Error:[/red] Failed to bump version in '{dep.name}'")
+            raise typer.Exit(1)
+        else:
+            logging.info(f"[green]Bumped version to '{version}' in '{dep.name}'[/green]")
+
+        result = run_command(['git', 'add', 'package.json'], dep.repo_path)
+    elif dep.package_type == "poetry":
+        output = run_command(['poetry', 'version', version.strip('v')], dep.repo_path)
+        if output is None:
+            logging.error(f"[red]Error:[/red] Failed to bump version in '{dep.name}'")
+            raise typer.Exit(1)
+        else:
+            logging.info(f"[green]Bumped version to '{version}' in '{dep.name}'[/green]")
+
+        result = run_command(['git', 'add', 'pyproject.toml'], dep.repo_path)
+    elif dep.package_type == "pip":
+        if not update_pyproject_version(dep.repo_path, version):
+            logging.error(f"[red]Error:[/red] Failed to update version in pyproject.toml in '{dep.name}'")
+            raise typer.Exit(1)
+        else:
+            logging.info(f"[green]Updated version to '{version}' in pyproject.toml in '{dep.name}'[/green]")
+
+        result = run_command(['git', 'add', 'pyproject.toml'], dep.repo_path)
+
+    if result is None:
+        logging.error(f"[red]Error:[/red] Failed to add pyproject.toml to staging area in '{dep.name}'")
+        raise typer.Exit(1)
+    else:
+        logging.info(f"[green]Added pyproject.toml to staging area in '{dep.name}'[/green]")
+
+    commit = run_command(['git', 'commit', '-m', f"Deepiri-Package-Version-Manager: Bump version ({dep.package_type}) to {version}"], dep.repo_path)
+    if commit is None:
+        logging.error(f"[red]Error:[/red] Failed to commit changes in '{dep.name}'")
+        raise typer.Exit(1)
+    else:
+        logging.info(f"[green]Committed changes in '{dep.name}'[/green]")
+
+
 def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistry, tag_name: Optional[str] = None, description: str = "", color: Optional[str] = None):
     dep = registry.get(dependency)
     dep_path = dep.repo_path
@@ -437,6 +500,7 @@ def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistr
     else:
         logging.error(f"[red]Error:[/red] Failed to add tag")
 
+    bump_version(dep, tag_name)
     output = run_command(['git', 'tag', '-a', tag_name, '-m', description], dep.repo_path)
 
     if output is None:
@@ -454,14 +518,15 @@ def tag_add(
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
 ):
     """Add a tag to a dependency."""
-    tag_mgr = TagManager()
-    registry = DependencyRegistry()
-    if not dependency_tree_check(dependency, registry):
-        rprint(f"[red]Error:[/red] Check logs for more information")
-        raise typer.Exit(1)
-    if not create_tag(dependency, tag_mgr, registry, tag_name, description, color):
-        rprint(f"[red]Error:[/red] Check logs for more information")
-        raise typer.Exit(1)
+    with console.status("[green]Adding tag...[/green]"):
+        tag_mgr = TagManager()
+        registry = DependencyRegistry()
+        if not dependency_tree_check(dependency, registry):
+            rprint(f"[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
+        if not create_tag(dependency, tag_mgr, registry, tag_name, description, color):
+            rprint(f"[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
 
     rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {tag_name}[/green]")
 
@@ -560,13 +625,6 @@ def tag_push(
         if not push_tag(dependency, dep_path, tag_mgr, tag_name):
             console.log(f"[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
-
-        if dep.package_type == "npm":
-            pass 
-        elif dep.package_type == "poetry":
-            pass
-        elif dep.package_type == "pip":
-            pass
     
     rprint(f"[green]Tag '{tag_name}' pushed to '{dependency}'[/green]")
 
@@ -700,6 +758,7 @@ def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str
     else:
         logging.info(f"[green]Added tag '{new_tag}' to '{dependency}'[/green]")
 
+    bump_version(dependency, new_tag)
     added_locally = run_command(['git', 'tag', '-a', new_tag, '-m', description], dep_path)
 
     if added_locally is None:

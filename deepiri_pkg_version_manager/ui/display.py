@@ -14,7 +14,7 @@ from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push, prom
 
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.cli.main import run_git_command, dependency_tree_check, create_tag, push_tag, remove_tag, update_helper
+from deepiri_pkg_version_manager.cli.main import run_command, dependency_tree_check, create_tag, push_tag, remove_tag, update_helper
 
 import logging
 logger = logging.getLogger(__name__)
@@ -342,7 +342,7 @@ class PackageManagerUI(QMainWindow):
             return "Up to date"
 
     def get_local_tags(self, dep_name, repo_path):
-        output = run_git_command(['git', 'tag', '--sort=-v:refname'], repo_path)
+        output = run_command(['git', 'tag', '--sort=-v:refname'], repo_path)
         if output is None:
             logger.error(f"[red]Error:[/red] Failed to get local tags for '{dep_name}'")
             return None
@@ -354,7 +354,7 @@ class PackageManagerUI(QMainWindow):
             return [tag for tag in output.strip().split('\n')]
 
     def get_remote_tags(self, dep_name, repo_path):
-        output = run_git_command(['git', 'ls-remote', '--tags', '--sort=-v:refname', 'origin'], repo_path)
+        output = run_command(['git', 'ls-remote', '--tags', '--sort=-v:refname', 'origin'], repo_path)
         if output is None:
             logger.error(f"[red]Error:[/red] Failed to get remote tags for '{dep_name}'")
             return None

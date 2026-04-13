@@ -332,7 +332,7 @@ def export(
         console.print(output_str)
 
 
-def run_git_command(command: List[str], cwd: str) -> Optional[str]:
+def run_command(command: List[str], cwd: str) -> Optional[str]:
     try:
         result = subprocess.run(
             command,
@@ -345,7 +345,7 @@ def run_git_command(command: List[str], cwd: str) -> Optional[str]:
 
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.strip() if e.stderr else str(e)
-        logging.error(f"[red]Git Error:[/red] {error_msg}")
+        logging.error(f"[red]Error:[/red] {error_msg}")
         return None
 
     except Exception as e:
@@ -368,7 +368,7 @@ def dependency_tree_check(dependency: str, registry: DependencyRegistry):
 
 
 def clean_working_tree(dep_path: str) -> bool:
-    clean = run_git_command(['git', 'status', '--porcelain'], dep_path)
+    clean = run_command(['git', 'status', '--porcelain'], dep_path)
     if clean is None:
         logging.error(f"[red]Error:[/red] Failed to check if working tree is clean")
         return False
@@ -384,7 +384,7 @@ def check_valid_tag(tag_name: str, dependency: str, dep_path: str):
     if not check_valid_format(tag_name):
         return False
 
-    tags = run_git_command(['git', 'tag', '--sort=-v:refname'], dep_path)
+    tags = run_command(['git', 'tag', '--sort=-v:refname'], dep_path)
     if tags is None:
         logging.error(f"[red]Error:[/red] Failed to get recent tag in '{dependency}'")
         return False
@@ -416,7 +416,7 @@ def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistr
     dep_path = dep.repo_path
 
     if tag_name is None:
-        local_tags = run_git_command(['git', 'tag'], dep_path)
+        local_tags = run_command(['git', 'tag'], dep_path)
         if local_tags is None:
             logging.error(f"[red]Error:[/red] Failed to get local tags in '{dependency}'")
             raise typer.Exit(1)
@@ -437,7 +437,7 @@ def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistr
     else:
         logging.error(f"[red]Error:[/red] Failed to add tag")
 
-    output = run_git_command(['git', 'tag', '-a', tag_name, '-m', description], dep.repo_path)
+    output = run_command(['git', 'tag', '-a', tag_name, '-m', description], dep.repo_path)
 
     if output is None:
         logging.error(f"[red]Error:[/red] Failed to create tag '{tag_name} in {dependency}'")
@@ -467,7 +467,7 @@ def tag_add(
 
 
 def push_sanitization(dependency: str, tag_name: str, dep_path: str):
-    remote_tags = run_git_command(['git', 'ls-remote', '--tags', 'origin'], dep_path)
+    remote_tags = run_command(['git', 'ls-remote', '--tags', 'origin'], dep_path)
     if remote_tags is None:
         logging.error(f"[red]Error:[/red] Failed to check if '{tag_name}' exists remotely in '{dependency}'")
         return False
@@ -499,13 +499,13 @@ def push_sanitization(dependency: str, tag_name: str, dep_path: str):
 
 
 def push_tag(dependency: str, dep_path: str, tag_mgr: TagManager, tag_name: Optional[str] = None) -> bool:
-    is_repo = run_git_command(['git', 'rev-parse', '--is-inside-work-tree'], dep_path)
+    is_repo = run_command(['git', 'rev-parse', '--is-inside-work-tree'], dep_path)
     if is_repo is None or is_repo != 'true':
         logging.error(f"[red]Error:[/red] Dependency '{dependency}' is not a submodule or repository, cannot push tag")
         return False
 
     if tag_name is None:
-        local_tags = run_git_command(['git', 'tag', '--sort=-v:refname'], dep_path)
+        local_tags = run_command(['git', 'tag', '--sort=-v:refname'], dep_path)
         if local_tags is None or local_tags.strip() == "":
             logging.error(f"[red]Error:[/red] There are no tags to push in '{dependency}'")
             return False
@@ -520,7 +520,7 @@ def push_tag(dependency: str, dep_path: str, tag_mgr: TagManager, tag_name: Opti
     else:
         logging.info(f"[green]Tag '{tag_name}' exists in dependency '{dependency}'[/green]")
 
-    exists_locally = run_git_command(['git', 'tag', '--list', tag_name], dep_path)
+    exists_locally = run_command(['git', 'tag', '--list', tag_name], dep_path)
     if exists_locally is None or exists_locally.strip() == "":
         logging.error(f"[red]Error:[/red] Tag '{tag_name}' not found locally in '{dependency}'")
         return False
@@ -531,7 +531,7 @@ def push_tag(dependency: str, dep_path: str, tag_mgr: TagManager, tag_name: Opti
         logging.error(f"[red]Error:[/red] Push sanitization failed")
         return False
 
-    output = run_git_command(['git', 'push', 'origin', tag_name], dep_path)
+    output = run_command(['git', 'push', 'origin', tag_name], dep_path)
     if output is None:
         logging.error(f"[red]Error:[/red] Failed to push tag '{tag_name}' to '{dependency}'")
         return False
@@ -560,6 +560,13 @@ def tag_push(
         if not push_tag(dependency, dep_path, tag_mgr, tag_name):
             console.log(f"[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
+
+        if dep.package_type == "npm":
+            pass 
+        elif dep.package_type == "poetry":
+            pass
+        elif dep.package_type == "pip":
+            pass
     
     rprint(f"[green]Tag '{tag_name}' pushed to '{dependency}'[/green]")
 
@@ -575,19 +582,19 @@ def remove_tag(dependency: str, tag_name: str, tag_mgr: TagManager, registry: De
         logging.error(f"[red]Error:[/red] Tag or dependency not found")
         return False
 
-    remove_locally = run_git_command(['git', 'tag', '-d', tag_name], dep_path)
+    remove_locally = run_command(['git', 'tag', '-d', tag_name], dep_path)
     if remove_locally is None:
         logging.error(f"[red]Error:[/red] Failed to remove tag '{tag_name}' from '{dependency}'")
         return False
     else:
         logging.info(f"[green]Removed tag '{tag_name}' from '{dependency}' locally[/green]")
     
-    check_remote = run_git_command(['git', 'ls-remote', '--tags', 'origin', tag_name], dep_path)
+    check_remote = run_command(['git', 'ls-remote', '--tags', 'origin', tag_name], dep_path)
     if check_remote is None:
         logging.error(f"[red]Error:[/red] Failed to check if tag '{tag_name}' exists remotely in '{dependency}'")
         return False
     elif check_remote.strip() != "":
-        delete = run_git_command(['git', 'push', 'origin', '--delete', tag_name], dep_path)
+        delete = run_command(['git', 'push', 'origin', '--delete', tag_name], dep_path)
         if delete is None:
             logging.error(f"[red]Error:[/red] Failed to delete tag '{tag_name}' from '{dependency}'")
             return False
@@ -658,7 +665,7 @@ def tag_list(
 
 
 def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str, description: str = "", color: Optional[str] = None) -> str | None:
-    recent_local = run_git_command(['git', 'tag', '--sort=-v:refname'], dep_path)
+    recent_local = run_command(['git', 'tag', '--sort=-v:refname'], dep_path)
     if recent_local is None or recent_local.strip() == "":
         logging.error(f"[red]Error:[/red] No tags found in '{dependency}'")
         return None
@@ -693,7 +700,7 @@ def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str
     else:
         logging.info(f"[green]Added tag '{new_tag}' to '{dependency}'[/green]")
 
-    added_locally = run_git_command(['git', 'tag', '-a', new_tag, '-m', description], dep_path)
+    added_locally = run_command(['git', 'tag', '-a', new_tag, '-m', description], dep_path)
 
     if added_locally is None:
         logging.error(f"[red]Error:[/red] Failed to add tag '{new_tag}' locally in '{dependency}'")

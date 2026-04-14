@@ -76,6 +76,8 @@ class DependencyGraphView(QGraphicsView):
             self._owner = owner
             self.out_edges: list[DependencyGraphView.ArrowEdge] = []
             self.in_edges: list[DependencyGraphView.ArrowEdge] = []
+            self._hover_nodes: set[DependencyGraphView.Node] = set()
+            self._hover_edges: set[DependencyGraphView.ArrowEdge] = set()
 
             self.setBrush(QBrush(QColor("#2d2d2d")))
             self.setPen(QPen(QColor("#555555"), 2))
@@ -127,29 +129,52 @@ class DependencyGraphView(QGraphicsView):
             br = self.label.boundingRect()
             self.label.setPos(-br.width() / 2, -br.height() / 2)
 
-        def hoverEnterEvent(self, event):
-            self.setBrush(QBrush(QColor("#3a86ff")))
-            self.setPen(QPen(QColor("#ffffff"), 2))
+        def _apply_node_highlight(self, on: bool) -> None:
+            if on:
+                self.setBrush(QBrush(QColor("#3a86ff")))
+                self.setPen(QPen(QColor("#ffffff"), 2))
+            else:
+                self.setBrush(QBrush(QColor("#2d2d2d")))
+                self.setPen(QPen(QColor("#555555"), 2))
 
-            for edge in self.out_edges:
+        def hoverEnterEvent(self, event):
+            nodes_to_highlight: set[DependencyGraphView.Node] = set()
+            edges_to_highlight: set[DependencyGraphView.ArrowEdge] = set()
+
+            # Highlight both direct dependencies and the full upstream dependent chain.
+            stack: list[DependencyGraphView.Node] = [self]
+            visited: set[DependencyGraphView.Node] = set()
+            while stack:
+                node = stack.pop()
+                if node in visited:
+                    continue
+                visited.add(node)
+                nodes_to_highlight.add(node)
+                for edge in node.out_edges:
+                    edges_to_highlight.add(edge)
+                    nodes_to_highlight.add(edge.dependency_node)
+                for edge in node.in_edges:
+                    edges_to_highlight.add(edge)
+                    nodes_to_highlight.add(edge.dependent_node)
+                    stack.append(edge.dependent_node)
+
+            for node in nodes_to_highlight:
+                node._apply_node_highlight(True)
+            for edge in edges_to_highlight:
                 edge.apply_highlight(True)
-                edge.dependency_node.setBrush(QBrush(QColor("#3a86ff")))
-                edge.dependency_node.setPen(QPen(QColor("#ffffff"), 2))
-            for edge in self.in_edges:
-                edge.apply_highlight(True)
+
+            self._hover_nodes = nodes_to_highlight
+            self._hover_edges = edges_to_highlight
 
             super().hoverEnterEvent(event)
 
         def hoverLeaveEvent(self, event):
-            self.setBrush(QBrush(QColor("#2d2d2d")))
-            self.setPen(QPen(QColor("#555555"), 2))
-
-            for edge in self.out_edges:
+            for node in self._hover_nodes:
+                node._apply_node_highlight(False)
+            for edge in self._hover_edges:
                 edge.apply_highlight(False)
-                edge.dependency_node.setBrush(QBrush(QColor("#2d2d2d")))
-                edge.dependency_node.setPen(QPen(QColor("#555555"), 2))
-            for edge in self.in_edges:
-                edge.apply_highlight(False)
+            self._hover_nodes.clear()
+            self._hover_edges.clear()
 
             super().hoverLeaveEvent(event)
 

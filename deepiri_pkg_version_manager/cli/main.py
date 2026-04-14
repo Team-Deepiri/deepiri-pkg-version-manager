@@ -629,23 +629,45 @@ def tag_push(
     rprint(f"[green]Tag '{tag_name}' pushed to '{dependency}'[/green]")
 
 
+def update_repo_with_most_recent_tag(dependency: str, dep_path: str):
+    recent_tag = run_command(['git', 'ls-remote', '--tags', '--sort=-v:refname', 'origin'], dep_path)
+    if recent_tag is None or recent_tag.strip() == "":
+        logging.info(f"[yellow]No tags found in '{dependency}', defaulting to v0.0.0[/yellow]")
+        tag_name = "v0.0.0"
+    else:
+        tag_name = recent_tag.strip().split("\n")[0]
+        logging.info(f"[green]Recent local tag in '{dependency}' is '{recent_tag}'[/green]")
+
+
+def remove_local_tag(dependency: str, tag_name: str, dep_path: str):
+    pass
+
+
+def remove_remote_tag(dependency: str, tag_name: str, dep_path: str):
+    pass
+
+
 def remove_tag(dependency: str, tag_name: str, tag_mgr: TagManager, registry: DependencyRegistry):
     dep = registry.get(dependency)
     dep_path = dep.repo_path
 
-    success = tag_mgr.remove_tag_from_dependency(dependency, tag_name)
-    if success:
-        logging.info(f"[green]Removed tag '{tag_name}' from '{dependency}' in db[/green]")
+    check_local = run_command(['git', 'tag', '--list', tag_name], dep_path)
+    if check_local is None or check_local.strip() == "":
+        logging.info(f"[yellow]Tag '{tag_name}' does not exist locally in '{dependency}'[/yellow]")
     else:
-        logging.error(f"[red]Error:[/red] Tag or dependency not found")
-        return False
+        success = tag_mgr.remove_tag_from_dependency(dependency, tag_name)
+        if success:
+            logging.info(f"[green]Removed tag '{tag_name}' from '{dependency}' in db[/green]")
+        else:
+            logging.error(f"[red]Error:[/red] Tag or dependency not found in storage")
+            return False
 
-    remove_locally = run_command(['git', 'tag', '-d', tag_name], dep_path)
-    if remove_locally is None:
-        logging.error(f"[red]Error:[/red] Failed to remove tag '{tag_name}' from '{dependency}'")
-        return False
-    else:
-        logging.info(f"[green]Removed tag '{tag_name}' from '{dependency}' locally[/green]")
+        remove_locally = run_command(['git', 'tag', '-d', tag_name], dep_path)
+        if remove_locally is None:
+            logging.error(f"[red]Error:[/red] Failed to remove tag '{tag_name}' from '{dependency}'")
+            return False
+        else:
+            logging.info(f"[green]Removed tag '{tag_name}' from '{dependency}' locally[/green]")
     
     check_remote = run_command(['git', 'ls-remote', '--tags', 'origin', tag_name], dep_path)
     if check_remote is None:
@@ -658,6 +680,7 @@ def remove_tag(dependency: str, tag_name: str, tag_mgr: TagManager, registry: De
             return False
         else:
             logging.info(f"[green]Deleted tag '{tag_name}' from '{dependency}'[/green]")
+            #update_repo_with_most_recent_tag(dep, dep_path)
     else:
         logging.info(f"[green]Tag '{tag_name}' does not exist remotely in '{dependency}'[/green]")
 
@@ -723,6 +746,7 @@ def tag_list(
 
 
 def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str, description: str = "", color: Optional[str] = None) -> str | None:
+    registry = DependencyRegistry()
     recent_local = run_command(['git', 'tag', '--sort=-v:refname'], dep_path)
     if recent_local is None or recent_local.strip() == "":
         logging.error(f"[red]Error:[/red] No tags found in '{dependency}'")
@@ -758,7 +782,7 @@ def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str
     else:
         logging.info(f"[green]Added tag '{new_tag}' to '{dependency}'[/green]")
 
-    bump_version(dependency, new_tag)
+    bump_version(registry.get(dependency), new_tag)
     added_locally = run_command(['git', 'tag', '-a', new_tag, '-m', description], dep_path)
 
     if added_locally is None:

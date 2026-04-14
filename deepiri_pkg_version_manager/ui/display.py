@@ -186,14 +186,17 @@ class PackageManagerUI(QMainWindow):
         if not item:
             result = prompt_add(self, self.dependency_registry)
             if result is None:
+                self.error_message("Failed to launch prompt")
                 return
             dep_name, tag_name, description = result
         else:
             dep_name = item.text()
             if not dependency_tree_check(dep_name, self.dependency_registry):
+                self.error_message("Dependency tree check failed")
                 return
             result = prompt_add(self, self.dependency_registry, dep=dep_name)
             if result is None:
+                self.error_message("Failed to launch prompt")
                 return
             tag_name, description = result
 
@@ -215,11 +218,13 @@ class PackageManagerUI(QMainWindow):
         if not item:
             result = prompt_push(self, self.dependency_registry)
             if result is None:
+                self.error_message("Failed to launch prompt")
                 return
             dep_name, tag_name = result
         else:
             dep_name = item.text()
             if not dependency_tree_check(dep_name, self.dependency_registry):
+                self.error_message("Dependency tree check failed")
                 return
             local_tag_item = self.local_tag_list.currentItem()
             remote_tag_item = self.remote_tag_list.currentItem()
@@ -229,6 +234,7 @@ class PackageManagerUI(QMainWindow):
             if local_tag_item is None:
                 result = prompt_push(self, self.dependency_registry, dep=dep_name)
                 if result is None:
+                    self.error_message("Failed to launch prompt")
                     return
                 tag_name = result
             else:
@@ -253,6 +259,7 @@ class PackageManagerUI(QMainWindow):
         if item is None:
             result = prompt_remove(self, self.dependency_registry)
             if result is None:
+                self.error_message("Failed to launch prompt")
                 return
             dep_name, tag_name = result
         else:
@@ -262,6 +269,7 @@ class PackageManagerUI(QMainWindow):
             if local_tag_item is None and remote_tag_item is None:
                 result = prompt_remove(self, self.dependency_registry, dep=dep_name)
                 if result is None:
+                    self.error_message("Failed to launch prompt")
                     return
                 tag_name = result
             elif local_tag_item is not None and remote_tag_item is None:
@@ -370,6 +378,7 @@ class PackageManagerUI(QMainWindow):
         if not item:
             result = prompt_update(self, self.dependency_registry, type)
             if result is None:
+                self.error_message("Failed to launch prompt")
                 return
             dep_name, description = result
         else:
@@ -379,6 +388,7 @@ class PackageManagerUI(QMainWindow):
                 return
             result = prompt_update(self, self.dependency_registry, type, dep=dep_name)
             if result is None:
+                self.error_message("Failed to launch prompt")
                 return
             description = result
 

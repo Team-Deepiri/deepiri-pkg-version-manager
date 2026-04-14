@@ -364,6 +364,10 @@ def dependency_tree_check(dependency: str, registry: DependencyRegistry):
         logging.error(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
         return False
 
+    if not is_synced_with_main(dep_path):
+        logging.error(f"[red]Error:[/red] '{dependency}' is not in sync with main branch, ensure you have pulled the latest changes from main and do not have any local commits before pushing a new tag.")
+        return False
+
     return True
 
 
@@ -375,10 +379,43 @@ def clean_working_tree(dep_path: str) -> bool:
     elif clean.strip() != '':
         logging.error(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
         return False
-    else:
-        logging.info(f"[green]Working tree is clean[/green]")
-        return True
+    
+    logging.info(f"[green]Working tree is clean[/green]")
+    return True
 
+
+def is_synced_with_main(dep_path: str) -> bool:
+    if run_command(['git', 'fetch', 'origin'], dep_path) is None:
+        logging.error("[red]Error:[/red] Failed to fetch origin")
+        return False
+
+    branch = run_command(['git', 'branch', '--show-current'], dep_path)
+    if branch is None or branch.strip() == "":
+        logging.error("[red]Error:[/red] Detached HEAD state detected. Please checkout a branch.")
+        return False
+
+    head = run_command(['git', 'rev-parse', 'HEAD'], dep_path)
+    main = run_command(['git', 'rev-parse', 'main'], dep_path)
+    origin_main = run_command(['git', 'rev-parse', 'origin/main'], dep_path)
+
+    if None in (head, main, origin_main):
+        logging.error("[red]Error:[/red] Failed to resolve commit hashes")
+        return False
+
+    head = head.strip()
+    main = main.strip()
+    origin_main = origin_main.strip()
+
+    if head != main:
+        logging.error("[red]Error:[/red] Current branch is not at the same commit as local main")
+        return False
+
+    if main != origin_main:
+        logging.error("[red]Error:[/red] Local main is not up-to-date with origin/main")
+        return False
+
+    logging.info("[green]Branch is aligned with main and origin/main[/green]")
+    return True
 
 def check_valid_tag(tag_name: str, dependency: str, dep_path: str):
     if not check_valid_format(tag_name):
@@ -437,7 +474,7 @@ def bump_version(dep, version: str):
         output = run_command(['npm', 'version', version.strip('v'), '--no-git-tag-version'], dep.repo_path) 
         if output is None:
             logging.error(f"[red]Error:[/red] Failed to bump version in '{dep.name}'")
-            raise typer.Exit(1)
+            return False
         else:
             logging.info(f"[green]Bumped version to '{version}' in '{dep.name}'[/green]")
 
@@ -446,7 +483,7 @@ def bump_version(dep, version: str):
         output = run_command(['poetry', 'version', version.strip('v')], dep.repo_path)
         if output is None:
             logging.error(f"[red]Error:[/red] Failed to bump version in '{dep.name}'")
-            raise typer.Exit(1)
+            return False
         else:
             logging.info(f"[green]Bumped version to '{version}' in '{dep.name}'[/green]")
 
@@ -454,7 +491,7 @@ def bump_version(dep, version: str):
     elif dep.package_type == "pip":
         if not update_pyproject_version(dep.repo_path, version):
             logging.error(f"[red]Error:[/red] Failed to update version in pyproject.toml in '{dep.name}'")
-            raise typer.Exit(1)
+            return False
         else:
             logging.info(f"[green]Updated version to '{version}' in pyproject.toml in '{dep.name}'[/green]")
 
@@ -462,17 +499,18 @@ def bump_version(dep, version: str):
 
     if result is None:
         logging.error(f"[red]Error:[/red] Failed to add pyproject.toml to staging area in '{dep.name}'")
-        raise typer.Exit(1)
+        return False
     else:
         logging.info(f"[green]Added pyproject.toml to staging area in '{dep.name}'[/green]")
 
     commit = run_command(['git', 'commit', '-m', f"Deepiri-Package-Version-Manager: Bump version ({dep.package_type}) to {version}"], dep.repo_path)
     if commit is None:
         logging.error(f"[red]Error:[/red] Failed to commit changes in '{dep.name}'")
-        raise typer.Exit(1)
+        return False
     else:
         logging.info(f"[green]Committed changes in '{dep.name}'[/green]")
 
+    return True
 
 def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistry, tag_name: Optional[str] = None, description: str = "", color: Optional[str] = None):
     dep = registry.get(dependency)
@@ -500,9 +538,13 @@ def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistr
     else:
         logging.error(f"[red]Error:[/red] Failed to add tag")
 
-    bump_version(dep, tag_name)
-    output = run_command(['git', 'tag', '-a', tag_name, '-m', description], dep.repo_path)
+    if not bump_version(dep, tag_name):
+        logging.error(f"[red]Error:[/red] Failed to bump version")
+        return False
+    else:
+        logging.info(f"[green]Bumped version to '{tag_name}' in '{dependency}'[/green]")
 
+    output = run_command(['git', 'tag', '-a', tag_name, '-m', description], dep.repo_path)
     if output is None:
         logging.error(f"[red]Error:[/red] Failed to create tag '{tag_name} in {dependency}'")
     else:
@@ -530,6 +572,68 @@ def tag_add(
 
     rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {tag_name}[/green]")
 
+
+def is_valid_push_state(dep_path: str, tag_name: str) -> bool:
+    if run_command(['git', 'fetch', 'origin'], dep_path) is None:
+        logging.error("Failed to fetch origin")
+        return False
+
+    if not clean_working_tree(dep_path):
+        return False
+
+    count = run_command(['git', 'rev-list', '--count', 'origin/main..HEAD'], dep_path)
+    if count is None:
+        logging.error("Failed to count commits ahead of origin/main")
+        return False
+
+    if count.strip() != "1":
+        logging.error(
+            "Branch must be exactly 1 commit ahead of origin/main to push a tag"
+        )
+        return False
+
+    head = run_command(['git', 'rev-parse', 'HEAD'], dep_path)
+    tag = run_command(['git', 'rev-parse', tag_name], dep_path)
+
+    if None in (head, tag):
+        logging.error("Failed to resolve commit hashes")
+        return False
+
+    logging.info("Push state is valid")
+    return True
+
+
+def create_pr(dependency: str, tag_name: str, dep_path: str):
+    logging.info("[green]Creating PR...[/green]")
+    branch = f"version/{tag_name}"
+    checkout = run_command(['git', 'checkout', '-b', branch], dep_path)
+    if checkout is None:
+        logging.error(f"[red]Error:[/red] Failed to checkout branch '{branch}'")
+        return False
+    else:
+        logging.info(f"[green]Checked out branch '{branch}'[/green]")
+
+    push_new_branch = run_command(['git', 'push', '-u', 'origin', branch], dep_path)
+    if push_new_branch is None:
+        logging.error(f"[red]Error:[/red] Failed to push branch '{branch}'")
+        return False
+    else:
+        logging.info(f"[green]Pushed branch '{branch}'[/green]")
+
+    create_pr = run_command([
+        'gh', 'pr', 'create',
+        '--title', f"Bump {dependency} version to {tag_name}",
+        '--body', f"Bump {dependency} version to {tag_name}, PR generated by Deepiri Package Version Manager",
+        '--base', 'main',
+        '--head', branch,
+    ], dep_path)
+    if create_pr is None:
+        logging.error(f"[red]Error:[/red] Failed to create PR")
+        return False
+    else:
+        logging.info(f"[green]Created PR '{create_pr}'[/green]")
+
+    return True
 
 def push_sanitization(dependency: str, tag_name: str, dep_path: str):
     remote_tags = run_command(['git', 'ls-remote', '--tags', 'origin'], dep_path)
@@ -596,6 +700,14 @@ def push_tag(dependency: str, dep_path: str, tag_mgr: TagManager, tag_name: Opti
         logging.error(f"[red]Error:[/red] Push sanitization failed")
         return False
 
+    pr = create_pr(dependency, tag_name, dep_path)
+    if not pr:
+        logging.error(f"[red]Error:[/red] Failed to create PR")
+        return False
+    else:
+        logging.info(f"[green]Created PR '{pr}'[/green]")
+
+    # For now we will manually push the tag to the repo, in the future we could have a github actions bot auto tag once the pr is merged
     output = run_command(['git', 'push', 'origin', tag_name], dep_path)
     if output is None:
         logging.error(f"[red]Error:[/red] Failed to push tag '{tag_name}' to '{dependency}'")
@@ -619,7 +731,7 @@ def tag_push(
 
         dep = registry.get(dependency)
         dep_path = dep.repo_path
-        if not dependency_tree_check(dependency, registry):
+        if not is_valid_push_state(dep_path, tag_name):
             console.log(f"[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
         if not push_tag(dependency, dep_path, tag_mgr, tag_name):
@@ -629,23 +741,51 @@ def tag_push(
     rprint(f"[green]Tag '{tag_name}' pushed to '{dependency}'[/green]")
 
 
-def update_repo_with_most_recent_tag(dependency: str, dep_path: str):
+def update_repo_with_most_recent_tag(dependency, tag_name: str, dep_path: str) -> bool:
     recent_tag = run_command(['git', 'ls-remote', '--tags', '--sort=-v:refname', 'origin'], dep_path)
     if recent_tag is None or recent_tag.strip() == "":
-        logging.info(f"[yellow]No tags found in '{dependency}', defaulting to v0.0.0[/yellow]")
+        logging.info(f"[yellow]No remote tags found in '{dependency.name}', defaulting to v0.0.0[/yellow]")
         tag_name = "v0.0.0"
     else:
         tag_name = recent_tag.strip().split("\n")[0]
-        logging.info(f"[green]Recent local tag in '{dependency}' is '{recent_tag}'[/green]")
+        logging.info(f"[green]Most recent remote tag in '{dependency.name}' is '{tag_name}'[/green]")
+
+    if not bump_version(dependency, tag_name):
+        logging.error(f"[red]Error:[/red] Failed to bump version")
+        return False
+    else:
+        logging.info(f"[green]Bumped version to '{tag_name}' in '{dependency}'[/green]")
+    
+    if not create_pr(dependency, tag_name, dep_path):
+        logging.error(f"[red]Error:[/red] Failed to create PR")
+        return False
+    else:
+        logging.info(f"[green]Created PR '{pr}'[/green]")
+
+    if tag_name == "v0.0.0":
+        output = run_command(['git', 'push', 'origin', tag_name], dep_path)
+        if output is None:
+            logging.error(f"[red]Error:[/red] Failed to push tag '{tag_name}' to '{dependency}'")
+            return False
+        else:
+            logging.info(f"[green]Pushed tag '{tag_name}' to '{dependency}'[/green]")
+    
+    return True
 
 
-def remove_local_tag(dependency: str, tag_name: str, dep_path: str):
-    pass
+def remove_check(dependency: str, registry: DependencyRegistry):
+    dep = registry.get(dependency)
+    if not dep:
+        logging.error(f"[red]Error:[/red] Dependency '{dependency}' not found")
+        return False
 
+    dep_path = dep.repo_path
+    if not clean_working_tree(dep_path):
+        logging.error(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
+        return False
 
-def remove_remote_tag(dependency: str, tag_name: str, dep_path: str):
-    pass
-
+    logging.info(f"[green]Remove check passed for '{dependency}'[/green]")
+    return True
 
 def remove_tag(dependency: str, tag_name: str, tag_mgr: TagManager, registry: DependencyRegistry):
     dep = registry.get(dependency)
@@ -680,7 +820,11 @@ def remove_tag(dependency: str, tag_name: str, tag_mgr: TagManager, registry: De
             return False
         else:
             logging.info(f"[green]Deleted tag '{tag_name}' from '{dependency}'[/green]")
-            #update_repo_with_most_recent_tag(dep, dep_path)
+            if not update_repo_with_most_recent_tag(dep, tag_name, dep_path):
+                logging.error(f"[red]Error:[/red] Failed to update repository with most recent tag")
+                return False
+            else:
+                logging.info(f"[green]Updated repository with most recent tag in '{dependency}'[/green]")
     else:
         logging.info(f"[green]Tag '{tag_name}' does not exist remotely in '{dependency}'[/green]")
 
@@ -697,7 +841,7 @@ def tag_remove(
     with console.status("[green]Removing tag...[/green]"):
         tag_mgr = TagManager()
         registry = DependencyRegistry()
-        if not dependency_tree_check(dependency, registry):
+        if not remove_check(dependency, registry):
             console.log(f"[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
         if not remove_tag(dependency, tag_name, tag_mgr, registry):
@@ -782,9 +926,13 @@ def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str
     else:
         logging.info(f"[green]Added tag '{new_tag}' to '{dependency}'[/green]")
 
-    bump_version(registry.get(dependency), new_tag)
-    added_locally = run_command(['git', 'tag', '-a', new_tag, '-m', description], dep_path)
+    if not bump_version(registry.get(dependency), new_tag):
+        logging.error(f"[red]Error:[/red] Failed to bump version")
+        return None
+    else:
+        logging.info(f"[green]Bumped version to '{new_tag}' in '{dependency}'[/green]")
 
+    added_locally = run_command(['git', 'tag', '-a', new_tag, '-m', description], dep_path)
     if added_locally is None:
         logging.error(f"[red]Error:[/red] Failed to add tag '{new_tag}' locally in '{dependency}'")
         return None

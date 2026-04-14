@@ -14,7 +14,7 @@ from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push, prom
 
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.cli.main import run_command, dependency_tree_check, create_tag, push_tag, remove_tag, update_helper
+from deepiri_pkg_version_manager.cli.main import run_command, dependency_tree_check, create_tag, push_tag, remove_tag, update_helper, is_valid_push_state
 
 import logging
 logger = logging.getLogger(__name__)
@@ -223,7 +223,7 @@ class PackageManagerUI(QMainWindow):
             dep_name, tag_name = result
         else:
             dep_name = item.text()
-            if not dependency_tree_check(dep_name, self.dependency_registry):
+            if not is_valid_push_state(self.dependency_registry.get(dep_name).repo_path, tag_name):
                 self.error_message("Dependency tree check failed")
                 return
             local_tag_item = self.local_tag_list.currentItem()

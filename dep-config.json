@@ -1,0 +1,106 @@
+{
+  "deepiri-core-api": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "deepiri-core-api"
+      }
+    ]
+  },
+  "deepiri-api-gateway": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "platform-services/backend/deepiri-api-gateway"
+      }
+    ]
+  },
+  "deepiri-web-frontend": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "deepiri-web-frontend"
+      }
+    ]
+  },
+  "deepiri-external-bridge-service": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "platform-services/backend/deepiri-external-bridge-service"
+      }
+    ]
+  },
+  "deepiri-auth-service": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "platform-services/backend/deepiri-auth-service"
+      }
+    ]
+  },
+  "deepiri-language-intelligence-service": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "platform-services/backend/deepiri-language-intelligence-service"
+      }
+    ]
+  },
+  "diri-persola": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "diri-persola"
+      }
+    ]
+  },
+  "deepiri-prismpipe": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "platform-services/shared/deepiri-prismpipe"
+      }
+    ]
+  },
+  "deepiri-shared-utils": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "platform-services/shared/deepiri-shared-utils"
+      }
+    ]
+  },
+  "diri-agent-testing-utils": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "submodule",
+        "path": "diri-agent-testing-utils"
+      }
+    ]
+  },
+  "deepiri-dataset-processor": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "submodule",
+        "path": "deepiri-dataset-processor"
+      },
+      {
+        "repo": "Team-Deepiri/diri-helox",
+        "type": "submodule",
+        "path": "deepiri-dataset-processor"
+      }
+    ]
+  }
+}

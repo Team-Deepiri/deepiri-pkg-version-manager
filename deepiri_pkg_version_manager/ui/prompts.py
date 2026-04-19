@@ -4,7 +4,10 @@ from PySide6.QtWidgets import (
 )
 
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.cli.main import dependency_tree_check, check_valid_tag, push_sanitization, check_valid_format, run_git_command
+from deepiri_pkg_version_manager.cli.main import dependency_tree_check, check_valid_tag, push_sanitization, check_valid_format, run_command
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 def prompt_add(parent, dependency_mgr: DependencyRegistry, dep: str = None) -> (
@@ -297,12 +300,12 @@ def prompt_update(parent, dependency_mgr: DependencyRegistry, type: str, dep: st
 
 
 def check_tags_exist_locally(dep_path: str) -> bool:
-    tags = run_git_command(['git', 'tag', '--sort=-v:refname'], dep_path)
+    tags = run_command(['git', 'tag', '--sort=-v:refname'], dep_path)
     if tags is None:
-        print(f"Failed to get tags for '{dep_path}'")
+        logging.error(f"Failed to get tags for '{dep_path}'")
         return False
     elif tags.strip() == "":
-        print(f"No tags found in '{dep_path}'")
+        logging.info(f"No tags found in '{dep_path}'")
         return False
     else:
         return True

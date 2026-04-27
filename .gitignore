@@ -43,6 +43,8 @@ env/
 *.env
 !env.example*
 !*env.example*
+*.7z
+github_pat.txt
 
 # API Keys & Certificates
 *.pem

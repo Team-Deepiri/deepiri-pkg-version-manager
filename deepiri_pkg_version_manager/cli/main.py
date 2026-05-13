@@ -3,6 +3,7 @@ import json
 import typer
 import subprocess
 import logging
+import os
 from typing import Optional, List
 import subprocess
 from pathlib import Path
@@ -12,6 +13,7 @@ from rich import print as rprint
 from rich.syntax import Syntax
 from packaging.version import Version
 from PySide6.QtWidgets import QApplication
+from dotenv import dotenv_values
 
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
@@ -33,6 +35,10 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
+
+env_path = Path(".env")
+env = dotenv_values(".env") if env_path.exists() else {}
+GITHUB_PAT = env.get("GITHUB_PAT", "-1")
 
 
 @app.command()
@@ -332,14 +338,19 @@ def export(
         console.print(output_str)
 
 
-def run_command(command: List[str], cwd: str) -> Optional[str]:
+def run_command(command: List[str], cwd: str, env_overrides: Optional[dict] = None) -> Optional[str]:
     try:
+        env = os.environ.copy()
+        if env_overrides:
+            env.update(env_overrides)
+
         result = subprocess.run(
             command,
             cwd=cwd,
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            env=env,
         )
         return result.stdout.strip()
 
@@ -681,6 +692,15 @@ def validate_pr(pr_url: str, dep_path: str):
 
 
 def auto_merge(pr_url: str, branch: str, dep_path: str):
+    if GITHUB_PAT == "-1":
+        logging.error(f"GitHub PAT is not set, please set it in the .env file as GITHUB_PAT to enable auto-merge")
+        return False
+
+    github_env = {
+        "GH_TOKEN": GITHUB_PAT,
+        "GITHUB_TOKEN": GITHUB_PAT,
+    }
+
     if not validate_pr(pr_url, dep_path):
         logging.error(f"[red]Error:[/red] Failed to validate PR '{pr_url}'")
         return False
@@ -690,14 +710,13 @@ def auto_merge(pr_url: str, branch: str, dep_path: str):
     pr_url = pr_url.rstrip("/").split("/")
     number = pr_url[-1]
     repo_path = f"{pr_url[-4]}/{pr_url[-3]}"
-
-    if not run_command(['gh', 'pr', 'review', str(number), '--repo', repo_path, '--approve'], dep_path):
+    if not run_command(['gh', 'pr', 'review', str(number), '--repo', repo_path, '--approve'], dep_path, env_overrides=github_env):
         logging.error(f"[red]Error:[/red] Failed to approve PR '{pr_url}'")
         return False
     else:
         logging.info(f"[green]Approved PR '{pr_url}'[/green]")
 
-    if not run_command(['gh', 'pr', 'merge', str(number), '--repo', repo_path, '--merge'], dep_path):
+    if not run_command(['gh', 'pr', 'merge', str(number), '--repo', repo_path, '--merge'], dep_path, env_overrides=github_env):
         logging.error(f"[red]Error:[/red] Failed to merge PR '{pr_url}'")
         return False
     else:
@@ -717,7 +736,7 @@ def auto_merge(pr_url: str, branch: str, dep_path: str):
     else:
         logging.info(f"[green]Deleted branch '{branch}' remotely[/green]")
 
-    # maybe checkout/pull from main to catch up to the latest commit
+    # maybe checkout/pull from main to catch up to the latest commit potentially use sync???
 
     return True
 

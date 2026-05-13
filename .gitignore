@@ -197,3 +197,5 @@ htmlcov/
 *.bak
 *.backup
 *.orig
+
+repos/

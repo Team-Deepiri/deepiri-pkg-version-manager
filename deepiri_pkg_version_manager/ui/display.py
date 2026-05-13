@@ -14,8 +14,15 @@ from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push, prom
 
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.utils import run_command
-from deepiri_pkg_version_manager.cli.main import dependency_tree_check, create_tag, push_tag, remove_tag, update_helper, is_valid_push_state
+from deepiri_pkg_version_manager.utils import (
+    create_tag,
+    dependency_tree_check,
+    is_valid_push_state,
+    push_tag,
+    remove_tag,
+    run_command,
+    update_helper,
+)
 
 import logging
 logger = logging.getLogger(__name__)

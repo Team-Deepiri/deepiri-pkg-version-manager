@@ -4,7 +4,8 @@ from PySide6.QtWidgets import (
 )
 
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.cli.main import dependency_tree_check, check_valid_tag, push_sanitization, check_valid_format, run_command, remove_check
+from deepiri_pkg_version_manager.utils import run_command
+from deepiri_pkg_version_manager.cli.main import dependency_tree_check, check_valid_tag, push_sanitization, check_valid_format, remove_check
 
 import logging
 logger = logging.getLogger(__name__)

@@ -51,10 +51,6 @@ def run_command(
         return None
 
 
-# ---------------------------------------------------------------------------
-# GitHub / org helpers
-# ---------------------------------------------------------------------------
-
 def check_org_permissions(org: str) -> bool:
     result = subprocess.run(
         ["gh", "api", f"orgs/{org}"],
@@ -64,10 +60,6 @@ def check_org_permissions(org: str) -> bool:
 
     return result.returncode == 0
 
-
-# ---------------------------------------------------------------------------
-# Repo state checks
-# ---------------------------------------------------------------------------
 
 def clean_working_tree(dep_path: str) -> bool:
     clean = run_command(['git', 'status', '--porcelain'], dep_path)
@@ -178,10 +170,6 @@ def is_valid_push_state(dep_path: str, tag_name: str) -> bool:
     logging.info("Push state is valid")
     return True
 
-
-# ---------------------------------------------------------------------------
-# Tag / version helpers
-# ---------------------------------------------------------------------------
 
 def check_valid_format(tag_name: str):
     if not tag_name.startswith("v") or not tag_name.count(".") == 2 or not tag_name.split(".")[0].strip("v").isdigit() or not tag_name.split(".")[1].isdigit() or not tag_name.split(".")[2].isdigit():
@@ -311,10 +299,6 @@ def push_sanitization(dependency: str, tag_name: str, dep_path: str):
         return False
 
 
-# ---------------------------------------------------------------------------
-# PR / merge helpers
-# ---------------------------------------------------------------------------
-
 def create_pr(dependency: str, tag_name: str, dep_path: str):
     logging.info("[green]Creating PR...[/green]")
     branch = f"version/{tag_name}"
@@ -434,14 +418,8 @@ def auto_merge(pr_url: str, branch: str, dep_path: str):
     else:
         logging.info(f"[green]Deleted branch '{branch}' remotely[/green]")
 
-    # maybe checkout/pull from main to catch up to the latest commit potentially use sync???
-
     return True
 
-
-# ---------------------------------------------------------------------------
-# Tag lifecycle helpers (create / push / remove / update)
-# ---------------------------------------------------------------------------
 
 def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistry, tag_name: Optional[str] = None, description: str = "", color: Optional[str] = None):
     dep = registry.get(dependency)

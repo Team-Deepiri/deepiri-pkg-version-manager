@@ -40,6 +40,32 @@ def normalize_package_name(name: str) -> str:
     return name.split("#")[0].split(":")[0].strip()
 
 
+def canonical_registry_name(declared_name: str) -> str:
+    """Single registry / graph key for a package.
+
+    Maps npm scoped names (@scope/pkg) to scope-pkg so the same repo is not
+    stored twice as e.g. @deepiri/logger vs deepiri-logger.
+    """
+    name = (declared_name or "").strip()
+    if not name:
+        return ""
+    if name.startswith("@"):
+        parts = [p for p in name.split("/") if p]
+        if not parts:
+            return name.lstrip("@")
+        scope = parts[0][1:] if parts[0].startswith("@") else parts[0]
+        if len(parts) >= 2:
+            tail = "-".join(p.replace("/", "-") for p in parts[1:])
+            return f"{scope}-{tail}"
+        return scope
+    return name.split("#")[0].split(":")[0].strip()
+
+
+def _dependency_registry_key(dep_name: str) -> str:
+    """Key used in dependency lists and edges (after normalize, then canonical)."""
+    return canonical_registry_name(normalize_package_name(dep_name))
+
+
 def is_internal_dep(dep_name: str) -> bool:
     """Check if a dependency is internal (Deepiri)."""
     patterns = [
@@ -48,6 +74,8 @@ def is_internal_dep(dep_name: str) -> bool:
         r"^@diri/",
         r"^diri-",
         r"^deepiri$",
+        r"^@team-deepiri/",
+        r"^team-deepiri-",
     ]
     return any(re.match(p, dep_name) for p in patterns)
 
@@ -154,13 +182,14 @@ def scan_package_json(repo_path: Path) -> Optional[ScannedDependency]:
         with open(package_json) as f:
             data = json.load(f)
 
-        name = data.get("name", repo_path.name)
+        raw_name = data.get("name") or repo_path.name
+        name = canonical_registry_name(str(raw_name)) or repo_path.name
         version = data.get("version")
         description = data.get("description")
 
         deps = data.get("dependencies", {})
         internal_deps = [
-            normalize_package_name(dep)
+            _dependency_registry_key(dep)
             for dep in deps.keys()
             if is_internal_dep(dep)
         ]
@@ -182,8 +211,10 @@ def scan_package_json(repo_path: Path) -> Optional[ScannedDependency]:
 
         # Check for file: dependencies (local)
         for dep_name, dep_version in deps.items():
-            if dep_version.startswith("file:"):
-                internal_deps.append(normalize_package_name(dep_name))
+            if dep_version.startswith("file:") and is_internal_dep(dep_name):
+                internal_deps.append(_dependency_registry_key(dep_name))
+
+        result.dependencies = sorted(dict.fromkeys(internal_deps))
 
         return result
 
@@ -205,7 +236,8 @@ def scan_pyproject_toml(repo_path: Path) -> Optional[ScannedDependency]:
         project = data.get("project", {})
         poetry = data.get("tool", {}).get("poetry", {})
         
-        name = project.get("name") or poetry.get("name") or repo_path.name
+        raw_name = project.get("name") or poetry.get("name") or repo_path.name
+        name = canonical_registry_name(str(raw_name)) or repo_path.name
         version = project.get("version") or poetry.get("version")
         description = project.get("description") or poetry.get("description")
         
@@ -215,24 +247,20 @@ def scan_pyproject_toml(repo_path: Path) -> Optional[ScannedDependency]:
 
         if is_poetry:
             deps = poetry.get("dependencies", {})
-            for dep_name, dep_value in deps.items():
+            for dep_name, _dep_value in deps.items():
                 if is_internal_dep(dep_name):
-                    git_info = extract_git_dependency(dep_value)
-                    if git_info:
-                        internal_deps.append(dep_name)
-                    else:
-                        internal_deps.append(dep_name)
+                    internal_deps.append(_dependency_registry_key(dep_name))
         else:
             deps = project.get("dependencies", [])
             for dep in deps:
                 if isinstance(dep, str):
                     dep_name = dep.split()[0]
                     if is_internal_dep(dep_name):
-                        internal_deps.append(dep_name)
+                        internal_deps.append(_dependency_registry_key(dep_name))
                 elif isinstance(dep, dict):
                     dep_name = dep.get("dep", "")
                     if is_internal_dep(dep_name):
-                        internal_deps.append(dep_name)
+                        internal_deps.append(_dependency_registry_key(dep_name))
 
         git_url, git_rev, git_tag, git_tags = extract_git_info(repo_path)
 
@@ -248,6 +276,8 @@ def scan_pyproject_toml(repo_path: Path) -> Optional[ScannedDependency]:
             git_tag=git_tag,
             git_tags=git_tags,
         )
+
+        result.dependencies = sorted(dict.fromkeys(internal_deps))
 
         return result
 
@@ -316,7 +346,7 @@ def scan_requirements_txt(repo_path: Path) -> Optional[ScannedDependency]:
                 if match:
                     pkg_name = match.group(1)
                     if is_internal_dep(pkg_name):
-                        internal_deps.append(pkg_name)
+                        internal_deps.append(_dependency_registry_key(pkg_name))
                 
                 # Extract version if available
                 if not version:
@@ -331,7 +361,7 @@ def scan_requirements_txt(repo_path: Path) -> Optional[ScannedDependency]:
             repo_path=str(repo_path),
             package_type="pip",
             version=version,
-            dependencies=internal_deps,
+            dependencies=sorted(dict.fromkeys(internal_deps)),
             git_url=git_url,
             git_rev=git_rev,
             git_tag=git_tag,
@@ -363,7 +393,7 @@ def scan_pipfile(repo_path: Path) -> Optional[ScannedDependency]:
         internal_deps = []
         for dep_name, dep_value in all_deps.items():
             if is_internal_dep(dep_name):
-                internal_deps.append(dep_name)
+                internal_deps.append(_dependency_registry_key(dep_name))
 
         git_url, git_rev, git_tag, git_tags = extract_git_info(repo_path)
 
@@ -371,7 +401,7 @@ def scan_pipfile(repo_path: Path) -> Optional[ScannedDependency]:
             name=repo_path.name,
             repo_path=str(repo_path),
             package_type="pipenv",
-            dependencies=internal_deps,
+            dependencies=sorted(dict.fromkeys(internal_deps)),
             git_url=git_url,
             git_rev=git_rev,
             git_tag=git_tag,
@@ -399,7 +429,7 @@ def scan_directory(
         console.print(f"[cyan]Package types:[/cyan] {', '.join(package_types)}")
 
     all_results = []
-    seen_names = set()
+    name_to_result: dict[str, ScannedDependency] = {}
 
     # Check for git submodules first
     submodules = check_git_submodules(root_path)
@@ -439,14 +469,35 @@ def scan_directory(
             if not result and "pip" in package_types:
                 result = scan_pipfile(subdir) or scan_requirements_txt(subdir)
 
-            if result and result.name not in seen_names:
-                seen_names.add(result.name)
-                all_results.append(result)
-                
-                if verbose:
-                    console.print(f"  [green]✓[/green] {result.name} ({result.package_type})")
-                    if result.git_rev:
-                        console.print(f"    @ {result.git_rev}")
+            if result:
+                if result.name not in name_to_result:
+                    name_to_result[result.name] = result
+                    all_results.append(result)
+
+                    if verbose:
+                        console.print(f"  [green]✓[/green] {result.name} ({result.package_type})")
+                        if result.git_rev:
+                            console.print(f"    @ {result.git_rev}")
+                else:
+                    existing = name_to_result[result.name]
+                    existing.dependencies = sorted(
+                        dict.fromkeys([*existing.dependencies, *result.dependencies])
+                    )
+                    if not existing.version and result.version:
+                        existing.version = result.version
+                    if not existing.git_rev and result.git_rev:
+                        existing.git_rev = result.git_rev
+                    if not existing.git_url and result.git_url:
+                        existing.git_url = result.git_url
+                    if not existing.git_tag and result.git_tag:
+                        existing.git_tag = result.git_tag
+                    if not existing.git_tags and result.git_tags:
+                        existing.git_tags = result.git_tags
+                    if verbose:
+                        console.print(
+                            f"  [dim]merged duplicate[/dim] {result.name} "
+                            f"({result.package_type} into {existing.package_type})"
+                        )
 
     return all_results
 

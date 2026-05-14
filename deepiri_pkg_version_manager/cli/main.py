@@ -1,3 +1,4 @@
+import os
 import sys
 import json
 import typer
@@ -9,6 +10,21 @@ from rich.console import Console
 from rich.table import Table
 from rich import print as rprint
 from rich.syntax import Syntax
+
+
+def _configure_qt_runtime_env() -> None:
+    is_wsl = "microsoft" in os.uname().release.lower() or bool(os.environ.get("WSL_DISTRO_NAME"))
+    if not is_wsl:
+        return
+
+    if not os.environ.get("DISPLAY"):
+        os.environ["DISPLAY"] = ":0"
+
+    os.environ["QT_QPA_PLATFORM"] = "xcb"
+
+
+_configure_qt_runtime_env()
+
 from PySide6.QtWidgets import QApplication
 
 from deepiri_pkg_version_manager.utils import (
@@ -20,6 +36,7 @@ from deepiri_pkg_version_manager.utils import (
     remove_check,
     remove_tag,
     update_helper,
+    run_command
 )
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
@@ -101,7 +118,8 @@ def scan(
         console.print(f"[cyan]Scanning:[/cyan] {org}")
         console.print(f"[cyan]Types:[/cyan] {', '.join(types)}")
 
-        scanned = scan_org(org, repo, package_types=types, verbose=verbose)
+        with console.status(f"[green]Scanning organization {org}, this may take a while...[/green]"):
+            scanned = scan_org(org, repo, package_types=types, verbose=verbose)
     
     console.print(f"\n[green]Found {len(scanned)} packages[/green]")
     
@@ -127,6 +145,7 @@ def scan(
 def clear_db():
     registry = DependencyRegistry()
     registry.clear_all()
+    clear_repos = run_command(["rm", "-rf", "repos"])
     console.print("[green]Database cleared[/green]")
 
 
@@ -217,6 +236,8 @@ def graph(
     app = QApplication(sys.argv)
     window = DependencyGraphView(g, root=root)
     window.show()
+    window.raise_()
+    window.activateWindow()
     sys.exit(app.exec())
 
 
@@ -540,6 +561,8 @@ def ui():
     app = QApplication(sys.argv)
     window = PackageManagerUI()
     window.show()
+    window.raise_()
+    window.activateWindow()
     sys.exit(app.exec())
 
 

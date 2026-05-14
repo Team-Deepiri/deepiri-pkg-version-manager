@@ -30,13 +30,16 @@ from PySide6.QtWidgets import QApplication
 from deepiri_pkg_version_manager.utils import (
     check_org_permissions,
     create_tag,
+    dep_clone_dir,
+    dep_org_repo,
     dependency_tree_check,
+    is_path_under,
     is_valid_push_state,
     push_tag,
     remove_check,
     remove_tag,
+    run_command,
     update_helper,
-    run_command
 )
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
@@ -142,11 +145,101 @@ def scan(
     return scanned
 
 @app.command("clear")
-def clear_db():
+def clear_db(
+    path: Optional[Path] = typer.Option(None, "--path", "-p", help="Path to clear"),
+    org: Optional[str] = typer.Option(None, "--org", "-o", help="Organization to clear"),
+    repo: Optional[str] = typer.Option(
+        None, "--repo", "-r", help="Repository to clear (requires --org)"
+    ),
+):
+    if path and org:
+        logging.error("[red]Error:[/red] Specify either a path or an organization, not both")
+        raise typer.Exit(1)
+
+    if repo and not org:
+        logging.error("[red]Error:[/red] --repo requires --org")
+        raise typer.Exit(1)
+
     registry = DependencyRegistry()
-    registry.clear_all()
-    clear_repos = run_command(["rm", "-rf", "repos"])
-    console.print("[green]Database cleared[/green]")
+    clone_root = Path("repos")
+
+    if not path and not org:
+        registry.clear_all()
+        if clone_root.exists():
+            if run_command(["rm", "-rf", str(clone_root)]) is None:
+                logging.error("[red]Error:[/red] Failed to clear repos directory")
+                raise typer.Exit(1)
+        console.print("[green]Cleared all dependencies and cloned repos[/green]")
+        return
+
+    if path is not None:
+        if not path.exists():
+            logging.error(f"[red]Error:[/red] Path does not exist: {path}")
+            raise typer.Exit(1)
+
+        target = path.resolve()
+        removed: list[str] = []
+        for dep in registry.get_all():
+            try:
+                dep_path = Path(dep.repo_path).resolve()
+            except (OSError, ValueError):
+                continue
+            if is_path_under(dep_path, target):
+                if registry.delete(dep.name):
+                    removed.append(dep.name)
+
+        console.print(
+            f"[green]Removed {len(removed)} dependencies under {path}[/green]"
+        )
+        return
+
+    target_repo = repo.lower() if repo else None
+    org_lc = org.lower()
+
+    removed_names: list[str] = []
+    clone_dirs_to_remove: set[Path] = set()
+    matched_repos: set[str] = set()
+
+    for dep in registry.get_all():
+        meta = dep_org_repo(dep)
+        if not meta:
+            continue
+        dep_org, dep_repo = meta
+        dep_repo_lc = dep_repo.lower()
+
+        if dep_org:
+            if dep_org.lower() != org_lc:
+                continue
+        elif target_repo is None or dep_repo_lc != target_repo:
+            continue
+
+        if target_repo is not None and dep_repo_lc != target_repo:
+            continue
+
+        if registry.delete(dep.name):
+            removed_names.append(dep.name)
+            matched_repos.add(dep_repo)
+            clone_dir = dep_clone_dir(dep, clone_root)
+            if clone_dir is not None:
+                clone_dirs_to_remove.add(clone_dir)
+
+    if target_repo is not None and not clone_dirs_to_remove:
+        candidate = clone_root / repo
+        if candidate.exists():
+            clone_dirs_to_remove.add(candidate.resolve())
+
+    for clone_dir in clone_dirs_to_remove:
+        if clone_dir.exists():
+            if run_command(["rm", "-rf", str(clone_dir)]) is None:
+                logging.error(
+                    f"[red]Error:[/red] Failed to remove clone directory {clone_dir}"
+                )
+
+    target_desc = f"{org}/{repo}" if repo else org
+    console.print(
+        f"[green]Removed {len(removed_names)} dependencies across "
+        f"{len(matched_repos) or (1 if target_repo else 0)} repos for {target_desc}[/green]"
+    )
 
 
 @app.command("deps")

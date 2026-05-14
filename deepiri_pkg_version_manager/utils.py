@@ -669,3 +669,56 @@ def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str
 
     logging.info(f"[green]To push tag remotely run: dtm tag push {dependency} {new_tag}[/green]")
     return new_tag
+
+
+def is_path_under(child: Path, parent: Path) -> bool:
+    """True when `child` equals or is contained in `parent` (callers should resolve first)."""
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def dep_org_repo(dep) -> Optional[tuple[str, str]]:
+    """Best-effort (org, repo) for a registered dep, from git_url or clone path.
+
+    Returns ``("", repo)`` when only a ``./repos/<repo>/`` fallback is available,
+    so callers can distinguish authoritative org matches from path-based guesses.
+    """
+    git_url = (getattr(dep, "git_url", "") or "").strip()
+    if git_url:
+        url = git_url.removesuffix(".git")
+        for sep in (":", "/"):
+            marker = f"github.com{sep}"
+            if marker in url:
+                tail = url.split(marker, 1)[1].strip("/")
+                parts = tail.split("/")
+                if len(parts) >= 2:
+                    return parts[0], parts[1]
+                break
+
+    try:
+        parts = Path(dep.repo_path).resolve().parts
+    except (OSError, ValueError, AttributeError):
+        return None
+    if "repos" in parts:
+        idx = parts.index("repos")
+        if idx + 1 < len(parts):
+            return "", parts[idx + 1]
+    return None
+
+
+def dep_clone_dir(dep, clone_root: Path) -> Optional[Path]:
+    """Return ``<clone_root>/<repo>/`` for a dep cloned by ``scan_org``, else None."""
+    try:
+        dep_path = Path(dep.repo_path).resolve()
+    except (OSError, ValueError, AttributeError):
+        return None
+    root = clone_root.resolve()
+    if not is_path_under(dep_path, root):
+        return None
+    relative_parts = dep_path.relative_to(root).parts
+    if not relative_parts:
+        return None
+    return root / relative_parts[0]

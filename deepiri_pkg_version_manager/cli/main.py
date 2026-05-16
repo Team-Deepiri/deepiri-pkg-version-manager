@@ -39,6 +39,7 @@ from deepiri_pkg_version_manager.utils import (
     remove_tag,
     run_command,
     update_helper,
+    branch_cleanup
 )
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
@@ -90,7 +91,7 @@ def scan(
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     save: bool = typer.Option(True, "--save/--no-save", help="Save to database"),
-    clear: bool = typer.Option(False, "--clear", help="Clear existing data before scanning"),
+    clear: bool = typer.Option(False, "--clear", help="Clear existing data before scanning")
 ):
     """Scan repositories and build dependency graph."""
     
@@ -120,8 +121,12 @@ def scan(
         console.print(f"[cyan]Scanning:[/cyan] {org}")
         console.print(f"[cyan]Types:[/cyan] {', '.join(types)}")
 
-        with console.status(f"[green]Scanning organization {org}, this may take a while...[/green]"):
-            scanned = scan_org(org, repo, package_types=types, verbose=verbose)
+        try: 
+            with console.status(f"[green]Scanning organization {org}, this may take a while...[/green]"):
+                scanned = scan_org(org, repo, package_types=types, verbose=verbose)
+        except Exception as e:
+            rprint(f"[red]Error:[/red] {e}, check logs for more information")
+            raise typer.Exit(1)
     
     console.print(f"\n[green]Found {len(scanned)} packages[/green]")
     
@@ -149,7 +154,7 @@ def clear_db(
     org: Optional[str] = typer.Option(None, "--org", "-o", help="Organization to clear"),
     repo: Optional[str] = typer.Option(
         None, "--repo", "-r", help="Repository to clear (requires --org)"
-    ),
+    )
 ):
     if path and org:
         logging.error("[red]Error:[/red] Specify either a path or an organization, not both")
@@ -245,7 +250,7 @@ def clear_db(
 def list_dependencies(
     name: Optional[str] = typer.Argument(None, help="Specific dependency to show"),
     package_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type"),
-    show_tags: bool = typer.Option(False, "--tags", "-T", help="Show tags"),
+    show_tags: bool = typer.Option(False, "--tags", "-T", help="Show tags")
 ):
     """List all dependencies or show details for one."""
     registry = DependencyRegistry()
@@ -318,7 +323,7 @@ def list_dependencies(
 def graph(
     root: Optional[str] = typer.Option(None, "--root", "-r", help="Root package to display"),
     dependents: Optional[str] = typer.Option(None, "--dependents", help="Find all packages depending on X"),
-    dependencies: Optional[str] = typer.Option(None, "--dependencies", help="Find all packages X depends on"),
+    dependencies: Optional[str] = typer.Option(None, "--dependencies", help="Find all packages X depends on")
 ):
     """Display dependency graph."""
     from deepiri_pkg_version_manager.ui.graphDisplay import DependencyGraphView
@@ -338,7 +343,7 @@ def install(
     dependency: Optional[str] = typer.Argument(None, help="Dependency to install (or all)"),
     package_manager: Optional[str] = typer.Option(None, "--manager", "-m", help="Force package manager: npm, poetry, pip, pipenv"),
     dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Show commands without running"),
-    all_deps: bool = typer.Option(False, "--all", "-a", help="Install all dependencies in package"),
+    all_deps: bool = typer.Option(False, "--all", "-a", help="Install all dependencies in package")
 ):
     """Generate or run install commands for dependencies."""
     registry = DependencyRegistry()
@@ -397,7 +402,7 @@ def outdated():
 
 @app.command()
 def sync(
-    dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Show changes without applying"),
+    dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Show changes without applying")
 ):
     """Sync versions across the dependency graph."""
     registry = DependencyRegistry()
@@ -437,7 +442,7 @@ def sync(
 @app.command()
 def export(
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file (default: stdout)"),
-    format: str = typer.Option("json", "--format", "-f", help="Output format: json, dot"),
+    format: str = typer.Option("json", "--format", "-f", help="Output format: json, dot")
 ):
     """Export dependency graph."""
     registry = DependencyRegistry()
@@ -484,7 +489,7 @@ def tag_add(
     dependency: str = typer.Argument(..., help="Dependency name"),
     tag_name: Optional[str] = typer.Argument(None, help="Tag name"),
     description: str = typer.Option(..., "--description", "-d", help="Tag description"),
-    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)")
 ):
     """Add a tag to a dependency."""
     with console.status("[green]Adding tag...[/green]"):
@@ -525,7 +530,7 @@ def tag_push(
 @tag_app.command("remove")
 def tag_remove(
     dependency: str = typer.Argument(..., help="Dependency name"),
-    tag_name: str = typer.Argument(..., help="Tag name"),
+    tag_name: str = typer.Argument(..., help="Tag name")
 ):
     """Remove a tag from a dependency."""
     with console.status("[green]Removing tag...[/green]"):
@@ -543,7 +548,7 @@ def tag_remove(
 
 @tag_app.command("list")
 def tag_list(
-    dependency: Optional[str] = typer.Argument(None, help="Dependency name (optional)"),
+    dependency: Optional[str] = typer.Argument(None, help="Dependency name (optional)")
 ):
     """List tags for a dependency or all tags."""
     tag_mgr = TagManager()
@@ -583,7 +588,7 @@ def tag_list(
 def tag_patch(
     dependency: str = typer.Argument(..., help="Dependency name"),
     description: str = typer.Option(..., "--description", "-d", help="Tag description"),
-    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)")
 ):
     with console.status("[green]Updating dependency tag with patch...[/green]"):
         tag_mgr = TagManager()
@@ -604,7 +609,7 @@ def tag_patch(
 def tag_minor(
     dependency: str = typer.Argument(..., help="Dependency name"),
     description: str = typer.Option(..., "--description", "-d", help="Tag description"),
-    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)")
 ):
     with console.status("[green]Updating dependency tag with minor bump...[/green]"):
         tag_mgr = TagManager()
@@ -625,7 +630,7 @@ def tag_minor(
 def tag_major(
     dependency: str = typer.Argument(..., help="Dependency name"),
     description: str = typer.Option(..., "--description", "-d", help="Tag description"),
-    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)")
 ):
     with console.status("[green]Updating dependency tag with major bump...[/green]"):
         tag_mgr = TagManager()
@@ -640,6 +645,21 @@ def tag_major(
             raise typer.Exit(1)
 
     rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {new_tag}[/green]")
+
+
+@app.command("branch-cleanup")
+def branchCleanup(
+    dep_name: str = typer.Option(..., "-d", "--dependency", help="Dependency name"),
+    tag_name: str = typer.Option(..., "-t", "--tag", help="Tag name")
+):
+    with console.status("[green]Cleaning up branch...[/green]"):
+        bc = branch_cleanup(dep_name, tag_name)
+            
+    if not bc:    
+        rprint(f"[red]Error:[/red] Failed to cleanup branch, check logs for more information")
+        raise typer.Exit(1)
+    else:
+        rprint(f"[green]Branch 'version/{tag_name}' cleaned up[/green]")
 
 
 @app.command("display")

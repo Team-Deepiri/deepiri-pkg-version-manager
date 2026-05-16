@@ -34,7 +34,6 @@ from deepiri_pkg_version_manager.utils import (
     dep_org_repo,
     dependency_tree_check,
     is_path_under,
-    is_valid_push_state,
     push_tag,
     remove_check,
     remove_tag,
@@ -516,10 +515,7 @@ def tag_push(
 
         dep = registry.get(dependency)
         dep_path = dep.repo_path
-        if not is_valid_push_state(dep_path, tag_name):
-            console.log(f"[red]Error:[/red] Check logs for more information")
-            raise typer.Exit(1)
-        if not push_tag(dependency, dep_path, tag_mgr, tag_name):
+        if not push_tag(dependency, dep_path, tag_mgr, registry, tag_name):
             console.log(f"[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
     

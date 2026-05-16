@@ -17,7 +17,6 @@ from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegis
 from deepiri_pkg_version_manager.utils import (
     create_tag,
     dependency_tree_check,
-    is_valid_push_state,
     push_tag,
     remove_tag,
     run_command,
@@ -231,9 +230,6 @@ class PackageManagerUI(QMainWindow):
             dep_name, tag_name = result
         else:
             dep_name = item.text()
-            if not is_valid_push_state(self.dependency_registry.get(dep_name).repo_path, tag_name):
-                self.error_message("Dependency tree check failed")
-                return
             local_tag_item = self.local_tag_list.currentItem()
             remote_tag_item = self.remote_tag_list.currentItem()
             if local_tag_item is None and remote_tag_item is not None:
@@ -249,7 +245,7 @@ class PackageManagerUI(QMainWindow):
                 tag_name = local_tag_item.text().split(' - ')[1]
 
         dep = self.dependency_registry.get(dep_name)
-        if not push_tag(dep_name, self.dependency_registry.get(dep_name).repo_path, self.tag_manager, tag_name):
+        if not push_tag(dep_name, self.dependency_registry.get(dep_name).repo_path, self.tag_manager, self.dependency_registry, tag_name):
             self.error_message("Failed to push tag")
             return
         else:

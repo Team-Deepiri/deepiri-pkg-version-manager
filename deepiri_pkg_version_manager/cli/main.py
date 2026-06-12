@@ -1,22 +1,50 @@
+import os
 import sys
 import json
 import typer
 import subprocess
 import logging
 from typing import Optional, List
-import subprocess
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from rich import print as rprint
 from rich.syntax import Syntax
-from packaging.version import Version
+
+
+def _configure_qt_runtime_env() -> None:
+    is_wsl = "microsoft" in os.uname().release.lower() or bool(os.environ.get("WSL_DISTRO_NAME"))
+    if not is_wsl:
+        return
+
+    if not os.environ.get("DISPLAY"):
+        os.environ["DISPLAY"] = ":0"
+
+    os.environ["QT_QPA_PLATFORM"] = "xcb"
+
+
+_configure_qt_runtime_env()
+
 from PySide6.QtWidgets import QApplication
 
+from deepiri_pkg_version_manager.utils import (
+    check_org_permissions,
+    create_tag,
+    dep_clone_dir,
+    dep_org_repo,
+    dependency_tree_check,
+    is_path_under,
+    push_tag,
+    remove_check,
+    remove_tag,
+    run_command,
+    update_helper,
+    branch_cleanup
+)
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
-from deepiri_pkg_version_manager.scanners.repo_scanner import scan_directory, get_install_command, get_install_all_command, version_sync_needed
-from deepiri_pkg_version_manager.graph.dependency_graph import DependencyGraph
+from deepiri_pkg_version_manager.scanners.repo_scanner import scan_directory, get_install_command, get_install_all_command
+from deepiri_pkg_version_manager.scanners.org_scanner import scan_org
 
 app = typer.Typer(
     name="dtm",
@@ -49,24 +77,56 @@ def scan(
         "-t",
         help="Package types to scan: npm, poetry, pip, all",
     ),
+    org: Optional[str] = typer.Option(
+        None,
+        "--org",
+        "-o",
+        help="Organization to scan",
+    ),
+    repo: Optional[str] = typer.Option(
+        None,
+        "--repo",
+        "-r",
+        help="Repository to scan (default: all repositories)",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     save: bool = typer.Option(True, "--save/--no-save", help="Save to database"),
-    clear: bool = typer.Option(False, "--clear", help="Clear existing data before scanning"),
+    clear: bool = typer.Option(False, "--clear", help="Clear existing data before scanning")
 ):
     """Scan repositories and build dependency graph."""
-    if path is None:
-        path = Path(__file__).parent.parent / "deepiri-platform"
     
-    if not path.exists():
+    if org and path:
+        logging.error(f"[red]Error:[/red] Specify either a path or an organization, not both")
+        raise typer.Exit(1)
+
+    if not org and not path:
+        path = Path(__file__).parent.parent / "deepiri-platform"
+
+    if path is not None and not path.exists():
         logging.error(f"[red]Error:[/red] Path does not exist: {path}")
         raise typer.Exit(1)
-    
+
     types = ["npm", "poetry", "pip"] if "all" in package_type else package_type
-    
-    console.print(f"[cyan]Scanning:[/cyan] {path}")
-    console.print(f"[cyan]Types:[/cyan] {', '.join(types)}")
-    
-    scanned = scan_directory(path, package_types=types, verbose=verbose)
+
+    if path is not None:
+        console.print(f"[cyan]Scanning:[/cyan] {path}")
+        console.print(f"[cyan]Types:[/cyan] {', '.join(types)}")
+
+        scanned = scan_directory(path, package_types=types, verbose=verbose)
+    else:
+        if not check_org_permissions(org):
+            logging.error(f"[red]Error:[/red] You do not have permission to scan this organization")
+            raise typer.Exit(1)
+
+        console.print(f"[cyan]Scanning:[/cyan] {org}")
+        console.print(f"[cyan]Types:[/cyan] {', '.join(types)}")
+
+        try: 
+            with console.status(f"[green]Scanning organization {org}, this may take a while...[/green]"):
+                scanned = scan_org(org, repo, package_types=types, verbose=verbose)
+        except Exception as e:
+            rprint(f"[red]Error:[/red] {e}, check logs for more information")
+            raise typer.Exit(1)
     
     console.print(f"\n[green]Found {len(scanned)} packages[/green]")
     
@@ -88,19 +148,109 @@ def scan(
     
     return scanned
 
-
 @app.command("clear")
-def clear_db():
+def clear_db(
+    path: Optional[Path] = typer.Option(None, "--path", "-p", help="Path to clear"),
+    org: Optional[str] = typer.Option(None, "--org", "-o", help="Organization to clear"),
+    repo: Optional[str] = typer.Option(
+        None, "--repo", "-r", help="Repository to clear (requires --org)"
+    )
+):
+    if path and org:
+        logging.error("[red]Error:[/red] Specify either a path or an organization, not both")
+        raise typer.Exit(1)
+
+    if repo and not org:
+        logging.error("[red]Error:[/red] --repo requires --org")
+        raise typer.Exit(1)
+
     registry = DependencyRegistry()
-    registry.clear_all()
-    console.print("[green]Database cleared[/green]")
+    clone_root = Path("repos")
+
+    if not path and not org:
+        registry.clear_all()
+        if clone_root.exists():
+            if run_command(["rm", "-rf", str(clone_root)]) is None:
+                logging.error("[red]Error:[/red] Failed to clear repos directory")
+                raise typer.Exit(1)
+        console.print("[green]Cleared all dependencies and cloned repos[/green]")
+        return
+
+    if path is not None:
+        if not path.exists():
+            logging.error(f"[red]Error:[/red] Path does not exist: {path}")
+            raise typer.Exit(1)
+
+        target = path.resolve()
+        removed: list[str] = []
+        for dep in registry.get_all():
+            try:
+                dep_path = Path(dep.repo_path).resolve()
+            except (OSError, ValueError):
+                continue
+            if is_path_under(dep_path, target):
+                if registry.delete(dep.name):
+                    removed.append(dep.name)
+
+        console.print(
+            f"[green]Removed {len(removed)} dependencies under {path}[/green]"
+        )
+        return
+
+    target_repo = repo.lower() if repo else None
+    org_lc = org.lower()
+
+    removed_names: list[str] = []
+    clone_dirs_to_remove: set[Path] = set()
+    matched_repos: set[str] = set()
+
+    for dep in registry.get_all():
+        meta = dep_org_repo(dep)
+        if not meta:
+            continue
+        dep_org, dep_repo = meta
+        dep_repo_lc = dep_repo.lower()
+
+        if dep_org:
+            if dep_org.lower() != org_lc:
+                continue
+        elif target_repo is None or dep_repo_lc != target_repo:
+            continue
+
+        if target_repo is not None and dep_repo_lc != target_repo:
+            continue
+
+        if registry.delete(dep.name):
+            removed_names.append(dep.name)
+            matched_repos.add(dep_repo)
+            clone_dir = dep_clone_dir(dep, clone_root)
+            if clone_dir is not None:
+                clone_dirs_to_remove.add(clone_dir)
+
+    if target_repo is not None and not clone_dirs_to_remove:
+        candidate = clone_root / repo
+        if candidate.exists():
+            clone_dirs_to_remove.add(candidate.resolve())
+
+    for clone_dir in clone_dirs_to_remove:
+        if clone_dir.exists():
+            if run_command(["rm", "-rf", str(clone_dir)]) is None:
+                logging.error(
+                    f"[red]Error:[/red] Failed to remove clone directory {clone_dir}"
+                )
+
+    target_desc = f"{org}/{repo}" if repo else org
+    console.print(
+        f"[green]Removed {len(removed_names)} dependencies across "
+        f"{len(matched_repos) or (1 if target_repo else 0)} repos for {target_desc}[/green]"
+    )
 
 
 @app.command("deps")
 def list_dependencies(
     name: Optional[str] = typer.Argument(None, help="Specific dependency to show"),
     package_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type"),
-    show_tags: bool = typer.Option(False, "--tags", "-T", help="Show tags"),
+    show_tags: bool = typer.Option(False, "--tags", "-T", help="Show tags")
 ):
     """List all dependencies or show details for one."""
     registry = DependencyRegistry()
@@ -173,7 +323,7 @@ def list_dependencies(
 def graph(
     root: Optional[str] = typer.Option(None, "--root", "-r", help="Root package to display"),
     dependents: Optional[str] = typer.Option(None, "--dependents", help="Find all packages depending on X"),
-    dependencies: Optional[str] = typer.Option(None, "--dependencies", help="Find all packages X depends on"),
+    dependencies: Optional[str] = typer.Option(None, "--dependencies", help="Find all packages X depends on")
 ):
     """Display dependency graph."""
     from deepiri_pkg_version_manager.ui.graphDisplay import DependencyGraphView
@@ -183,6 +333,8 @@ def graph(
     app = QApplication(sys.argv)
     window = DependencyGraphView(g, root=root)
     window.show()
+    window.raise_()
+    window.activateWindow()
     sys.exit(app.exec())
 
 
@@ -191,7 +343,7 @@ def install(
     dependency: Optional[str] = typer.Argument(None, help="Dependency to install (or all)"),
     package_manager: Optional[str] = typer.Option(None, "--manager", "-m", help="Force package manager: npm, poetry, pip, pipenv"),
     dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Show commands without running"),
-    all_deps: bool = typer.Option(False, "--all", "-a", help="Install all dependencies in package"),
+    all_deps: bool = typer.Option(False, "--all", "-a", help="Install all dependencies in package")
 ):
     """Generate or run install commands for dependencies."""
     registry = DependencyRegistry()
@@ -250,7 +402,7 @@ def outdated():
 
 @app.command()
 def sync(
-    dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Show changes without applying"),
+    dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Show changes without applying")
 ):
     """Sync versions across the dependency graph."""
     registry = DependencyRegistry()
@@ -290,7 +442,7 @@ def sync(
 @app.command()
 def export(
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file (default: stdout)"),
-    format: str = typer.Option("json", "--format", "-f", help="Output format: json, dot"),
+    format: str = typer.Option("json", "--format", "-f", help="Output format: json, dot")
 ):
     """Export dependency graph."""
     registry = DependencyRegistry()
@@ -332,190 +484,12 @@ def export(
         console.print(output_str)
 
 
-def run_command(command: List[str], cwd: str) -> Optional[str]:
-    try:
-        result = subprocess.run(
-            command,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return result.stdout.strip()
-
-    except subprocess.CalledProcessError as e:
-        error_msg = e.stderr.strip() if e.stderr else str(e)
-        logging.error(f"[red]Error:[/red] {error_msg}")
-        return None
-
-    except Exception as e:
-        logging.error(f"[red]Unexpected Error:[/red] {e}")
-        return None
-
-
-def dependency_tree_check(dependency: str, registry: DependencyRegistry):
-    dep = registry.get(dependency)
-    if not dep:
-        logging.error(f"[red]Error:[/red] Dependency '{dependency}' not found")
-        return False
-
-    dep_path = dep.repo_path
-    if not clean_working_tree(dep_path):
-        logging.error(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
-        return False
-
-    return True
-
-
-def clean_working_tree(dep_path: str) -> bool:
-    clean = run_command(['git', 'status', '--porcelain'], dep_path)
-    if clean is None:
-        logging.error(f"[red]Error:[/red] Failed to check if working tree is clean")
-        return False
-    elif clean.strip() != '':
-        logging.error(f"[red]Error:[/red] Working tree is not clean, ensure all changes are committed or stashed before pushing a new tag.")
-        return False
-    else:
-        logging.info(f"[green]Working tree is clean[/green]")
-        return True
-
-
-def check_valid_tag(tag_name: str, dependency: str, dep_path: str):
-    if not check_valid_format(tag_name):
-        return False
-
-    tags = run_command(['git', 'tag', '--sort=-v:refname'], dep_path)
-    if tags is None:
-        logging.error(f"[red]Error:[/red] Failed to get recent tag in '{dependency}'")
-        return False
-    elif tags.strip() == "":
-        logging.error(f"[green]No tags exist in '{dependency}'[/green]")
-        return True
-    
-    if tags:
-        latest_tag = tags.strip().split("\n")[0]
-        if Version(tag_name) <= Version(latest_tag):
-            logging.error(f"[red]Error:[/red] Tag '{tag_name}' is not greater than latest tag '{latest_tag.join(".")}' in '{dependency}'")
-            return False
-    
-    logging.info(f"[green]Tag '{tag_name}' is valid in '{dependency}'[/green]")
-    return True
-
-
-def check_valid_format(tag_name: str):
-    if not tag_name.startswith("v") or not tag_name.count(".") == 2 or not tag_name.split(".")[0].strip("v").isdigit() or not tag_name.split(".")[1].isdigit() or not tag_name.split(".")[2].isdigit():
-        logging.error(f"[red]Error:[/red] Invalid tag format '{tag_name}', use format v<major>.<minor>.<patch>")
-        return False
-    else:
-        logging.info(f"[green]Tag '{tag_name}' is valid format[/green]")
-        return True
-
-
-def update_pyproject_version(repo_path: str, version: str):
-    import toml
-
-    pyproject_path = os.path.join(repo_path, "pyproject.toml")
-    data = toml.load(pyproject_path)
-
-    if "project" in data and "version" in data["project"]:
-        data["project"]["version"] = version
-    elif "tool" in data and "poetry" in data["tool"]:
-        data["tool"]["poetry"]["version"] = version
-    else:
-        logging.error(f"[red]Error:[/red] No version field found in pyproject.toml")
-        return False
-
-    with open(pyproject_path, "w") as f:
-        toml.dump(data, f)
-
-    logging.info(f"[green]Updated version to '{version}' in pyproject.toml[/green]")
-    return True
-
-
-def bump_version(dep, version: str):
-    if dep.package_type == "npm":
-        output = run_command(['npm', 'version', version.strip('v'), '--no-git-tag-version'], dep.repo_path) 
-        if output is None:
-            logging.error(f"[red]Error:[/red] Failed to bump version in '{dep.name}'")
-            raise typer.Exit(1)
-        else:
-            logging.info(f"[green]Bumped version to '{version}' in '{dep.name}'[/green]")
-
-        result = run_command(['git', 'add', 'package.json'], dep.repo_path)
-    elif dep.package_type == "poetry":
-        output = run_command(['poetry', 'version', version.strip('v')], dep.repo_path)
-        if output is None:
-            logging.error(f"[red]Error:[/red] Failed to bump version in '{dep.name}'")
-            raise typer.Exit(1)
-        else:
-            logging.info(f"[green]Bumped version to '{version}' in '{dep.name}'[/green]")
-
-        result = run_command(['git', 'add', 'pyproject.toml'], dep.repo_path)
-    elif dep.package_type == "pip":
-        if not update_pyproject_version(dep.repo_path, version):
-            logging.error(f"[red]Error:[/red] Failed to update version in pyproject.toml in '{dep.name}'")
-            raise typer.Exit(1)
-        else:
-            logging.info(f"[green]Updated version to '{version}' in pyproject.toml in '{dep.name}'[/green]")
-
-        result = run_command(['git', 'add', 'pyproject.toml'], dep.repo_path)
-
-    if result is None:
-        logging.error(f"[red]Error:[/red] Failed to add pyproject.toml to staging area in '{dep.name}'")
-        raise typer.Exit(1)
-    else:
-        logging.info(f"[green]Added pyproject.toml to staging area in '{dep.name}'[/green]")
-
-    commit = run_command(['git', 'commit', '-m', f"Deepiri-Package-Version-Manager: Bump version ({dep.package_type}) to {version}"], dep.repo_path)
-    if commit is None:
-        logging.error(f"[red]Error:[/red] Failed to commit changes in '{dep.name}'")
-        raise typer.Exit(1)
-    else:
-        logging.info(f"[green]Committed changes in '{dep.name}'[/green]")
-
-
-def create_tag(dependency: str, tag_mgr: TagManager, registry: DependencyRegistry, tag_name: Optional[str] = None, description: str = "", color: Optional[str] = None):
-    dep = registry.get(dependency)
-    dep_path = dep.repo_path
-
-    if tag_name is None:
-        local_tags = run_command(['git', 'tag'], dep_path)
-        if local_tags is None:
-            logging.error(f"[red]Error:[/red] Failed to get local tags in '{dependency}'")
-            raise typer.Exit(1)
-        elif local_tags.strip() != "":
-            logging.error(f"[red]Error:[/red] Local tags found in '{dependency}', to use default add behavior there should be no local tags.")
-            raise typer.Exit(1)
-        else:
-            tag_name = "v0.0.0"
-    else:
-        if not check_valid_tag(tag_name, dependency, dep_path):
-            logging.error(f"[red]Error:[/red] Tag '{tag_name}' is not valid in '{dependency}'")
-            raise typer.Exit(1)
-
-    tag_mgr.create_tag(name=tag_name, description=description, color=color)
-    success = tag_mgr.add_tag_to_dependency(dependency, tag_name)
-    if success:
-        logging.info(f"[green]Added tag '{tag_name}' to '{dependency}' in db[/green]")
-    else:
-        logging.error(f"[red]Error:[/red] Failed to add tag")
-
-    bump_version(dep, tag_name)
-    output = run_command(['git', 'tag', '-a', tag_name, '-m', description], dep.repo_path)
-
-    if output is None:
-        logging.error(f"[red]Error:[/red] Failed to create tag '{tag_name} in {dependency}'")
-    else:
-        logging.info(f"[green]Created tag '{tag_name}' in '{dependency}' locally[/green]")
-
-    return True
-
 @tag_app.command("add")
 def tag_add(
     dependency: str = typer.Argument(..., help="Dependency name"),
     tag_name: Optional[str] = typer.Argument(None, help="Tag name"),
     description: str = typer.Option(..., "--description", "-d", help="Tag description"),
-    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)")
 ):
     """Add a tag to a dependency."""
     with console.status("[green]Adding tag...[/green]"):
@@ -528,83 +502,10 @@ def tag_add(
             rprint(f"[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
 
-    rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {tag_name}[/green]")
-
-
-def push_sanitization(dependency: str, tag_name: str, dep_path: str):
-    remote_tags = run_command(['git', 'ls-remote', '--tags', 'origin'], dep_path)
-    if remote_tags is None:
-        logging.error(f"[red]Error:[/red] Failed to check if '{tag_name}' exists remotely in '{dependency}'")
-        return False
-    elif remote_tags.strip() == "":
-        logging.info(f"[green]No tags exist remotely in {dependency}[/green]")
-        return True
-    elif remote_tags.strip() != "":
-        tags = set()
-        for tag in remote_tags.strip().split('\n'):
-            if 'refs/tags/' in tag:
-                tag = tag.split('refs/tags/')[1]
-                tag = tag.replace('^{}', '')
-                tags.add(tag)
-        
-        if not tags:
-            logging.info(f"[green]No tags exist with ref/tags/ in '{dependency}'[/green]")
-            return True
-
-        latest_tag = max(tags, key=Version)
-        if Version(tag_name) <= Version(latest_tag):
-            logging.error(f"[red]Error:[/red] Tag '{tag_name}' is not greater than latest tag '{latest_tag}' in '{dependency}'")
-            return False
-        else:
-            logging.info(f"[green]Tag '{tag_name}' is greater than latest tag '{latest_tag}' in '{dependency}'[/green]")
-            return True
-    else:
-        logging.error(f"[red]Error:[/red] during push sanitization.")
-        return False
-
-
-def push_tag(dependency: str, dep_path: str, tag_mgr: TagManager, tag_name: Optional[str] = None) -> bool:
-    is_repo = run_command(['git', 'rev-parse', '--is-inside-work-tree'], dep_path)
-    if is_repo is None or is_repo != 'true':
-        logging.error(f"[red]Error:[/red] Dependency '{dependency}' is not a submodule or repository, cannot push tag")
-        return False
-
     if tag_name is None:
-        local_tags = run_command(['git', 'tag', '--sort=-v:refname'], dep_path)
-        if local_tags is None or local_tags.strip() == "":
-            logging.error(f"[red]Error:[/red] There are no tags to push in '{dependency}'")
-            return False
-        elif local_tags.strip() != "":
-            tag_name = local_tags.strip().split("\n")[0]
-            logging.info(f"[green]Pushing latest tag '{tag_name}' in '{dependency}'[/green]")
-    
-    exists_in_db = tag_mgr.check_tag_exists_in_dependency(dependency, tag_name)
-    if not exists_in_db:
-        logging.error(f"[red]Error:[/red] Tag '{tag_name}' not found in dependency '{dependency}'")
-        return False
+        rprint(f"[green]To push tag remotely run: dtm tag push {dependency} v0.0.0[/green]")
     else:
-        logging.info(f"[green]Tag '{tag_name}' exists in dependency '{dependency}'[/green]")
-
-    exists_locally = run_command(['git', 'tag', '--list', tag_name], dep_path)
-    if exists_locally is None or exists_locally.strip() == "":
-        logging.error(f"[red]Error:[/red] Tag '{tag_name}' not found locally in '{dependency}'")
-        return False
-    else:
-        logging.info(f"[green]Tag '{tag_name}' exists locally in '{dependency}'[/green]")
-
-    if not push_sanitization(dependency, tag_name, dep_path):
-        logging.error(f"[red]Error:[/red] Push sanitization failed")
-        return False
-
-    output = run_command(['git', 'push', 'origin', tag_name], dep_path)
-    if output is None:
-        logging.error(f"[red]Error:[/red] Failed to push tag '{tag_name}' to '{dependency}'")
-        return False
-    else:
-        logging.info(f"[green]Pushed tag '{tag_name}' to '{dependency}'[/green]")
-
-    logging.info(f"[green]Tag '{tag_name}' pushed to '{dependency}'[/green]")
-    return True
+        rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {tag_name}[/green]")
 
 
 @tag_app.command("push")
@@ -619,85 +520,23 @@ def tag_push(
 
         dep = registry.get(dependency)
         dep_path = dep.repo_path
-        if not dependency_tree_check(dependency, registry):
-            console.log(f"[red]Error:[/red] Check logs for more information")
-            raise typer.Exit(1)
-        if not push_tag(dependency, dep_path, tag_mgr, tag_name):
+        if not push_tag(dependency, dep_path, tag_mgr, registry, tag_name):
             console.log(f"[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
     
     rprint(f"[green]Tag '{tag_name}' pushed to '{dependency}'[/green]")
 
 
-def update_repo_with_most_recent_tag(dependency: str, dep_path: str):
-    recent_tag = run_command(['git', 'ls-remote', '--tags', '--sort=-v:refname', 'origin'], dep_path)
-    if recent_tag is None or recent_tag.strip() == "":
-        logging.info(f"[yellow]No tags found in '{dependency}', defaulting to v0.0.0[/yellow]")
-        tag_name = "v0.0.0"
-    else:
-        tag_name = recent_tag.strip().split("\n")[0]
-        logging.info(f"[green]Recent local tag in '{dependency}' is '{recent_tag}'[/green]")
-
-
-def remove_local_tag(dependency: str, tag_name: str, dep_path: str):
-    pass
-
-
-def remove_remote_tag(dependency: str, tag_name: str, dep_path: str):
-    pass
-
-
-def remove_tag(dependency: str, tag_name: str, tag_mgr: TagManager, registry: DependencyRegistry):
-    dep = registry.get(dependency)
-    dep_path = dep.repo_path
-
-    check_local = run_command(['git', 'tag', '--list', tag_name], dep_path)
-    if check_local is None or check_local.strip() == "":
-        logging.info(f"[yellow]Tag '{tag_name}' does not exist locally in '{dependency}'[/yellow]")
-    else:
-        success = tag_mgr.remove_tag_from_dependency(dependency, tag_name)
-        if success:
-            logging.info(f"[green]Removed tag '{tag_name}' from '{dependency}' in db[/green]")
-        else:
-            logging.error(f"[red]Error:[/red] Tag or dependency not found in storage")
-            return False
-
-        remove_locally = run_command(['git', 'tag', '-d', tag_name], dep_path)
-        if remove_locally is None:
-            logging.error(f"[red]Error:[/red] Failed to remove tag '{tag_name}' from '{dependency}'")
-            return False
-        else:
-            logging.info(f"[green]Removed tag '{tag_name}' from '{dependency}' locally[/green]")
-    
-    check_remote = run_command(['git', 'ls-remote', '--tags', 'origin', tag_name], dep_path)
-    if check_remote is None:
-        logging.error(f"[red]Error:[/red] Failed to check if tag '{tag_name}' exists remotely in '{dependency}'")
-        return False
-    elif check_remote.strip() != "":
-        delete = run_command(['git', 'push', 'origin', '--delete', tag_name], dep_path)
-        if delete is None:
-            logging.error(f"[red]Error:[/red] Failed to delete tag '{tag_name}' from '{dependency}'")
-            return False
-        else:
-            logging.info(f"[green]Deleted tag '{tag_name}' from '{dependency}'[/green]")
-            #update_repo_with_most_recent_tag(dep, dep_path)
-    else:
-        logging.info(f"[green]Tag '{tag_name}' does not exist remotely in '{dependency}'[/green]")
-
-    logging.info(f"[green]Tag '{tag_name}' removed from '{dependency}'[/green]")
-    return True
-
-
 @tag_app.command("remove")
 def tag_remove(
     dependency: str = typer.Argument(..., help="Dependency name"),
-    tag_name: str = typer.Argument(..., help="Tag name"),
+    tag_name: str = typer.Argument(..., help="Tag name")
 ):
     """Remove a tag from a dependency."""
     with console.status("[green]Removing tag...[/green]"):
         tag_mgr = TagManager()
         registry = DependencyRegistry()
-        if not dependency_tree_check(dependency, registry):
+        if not remove_check(dependency, registry):
             console.log(f"[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
         if not remove_tag(dependency, tag_name, tag_mgr, registry):
@@ -709,7 +548,7 @@ def tag_remove(
 
 @tag_app.command("list")
 def tag_list(
-    dependency: Optional[str] = typer.Argument(None, help="Dependency name (optional)"),
+    dependency: Optional[str] = typer.Argument(None, help="Dependency name (optional)")
 ):
     """List tags for a dependency or all tags."""
     tag_mgr = TagManager()
@@ -745,61 +584,11 @@ def tag_list(
         console.print(table)
 
 
-def update_helper(dependency: str, tag_mgr: TagManager, dep_path: str, type: str, description: str = "", color: Optional[str] = None) -> str | None:
-    registry = DependencyRegistry()
-    recent_local = run_command(['git', 'tag', '--sort=-v:refname'], dep_path)
-    if recent_local is None or recent_local.strip() == "":
-        logging.error(f"[red]Error:[/red] No tags found in '{dependency}'")
-        return None
-    else:
-        tag_name = recent_local.strip().split("\n")[0]
-        logging.info(f"[green]Recent local tag in '{dependency}' is '{recent_local}'[/green]")
-
-    if type == "patch":
-        tag = tag_name.split('.')
-        tag[-1] = str(int(tag[-1]) + 1)
-        new_tag = '.'.join(tag)
-    elif type == "minor":
-        tag = tag_name.split('.')
-        tag[-2] = str(int(tag[-2]) + 1)
-        tag[-1] = '0'
-        new_tag = '.'.join(tag)
-    elif type == "major":
-        tag = tag_name.split('.')
-        tag[0] = 'v' + str(int(tag[0].lstrip('v')) + 1)
-        tag[-2] = '0'
-        tag[-1] = '0'
-        new_tag = '.'.join(tag)
-    else:
-        logging.error(f"[red]Error:[/red] Invalid type '{type}'")
-        return None
-
-    tag_mgr.create_tag(name=new_tag, description=description, color=color)
-    added = tag_mgr.add_tag_to_dependency(dependency, new_tag)
-    if not added:
-        logging.error(f"[red]Error:[/red] Failed to add tag '{new_tag}' to '{dependency}'")
-        return None
-    else:
-        logging.info(f"[green]Added tag '{new_tag}' to '{dependency}'[/green]")
-
-    bump_version(registry.get(dependency), new_tag)
-    added_locally = run_command(['git', 'tag', '-a', new_tag, '-m', description], dep_path)
-
-    if added_locally is None:
-        logging.error(f"[red]Error:[/red] Failed to add tag '{new_tag}' locally in '{dependency}'")
-        return None
-    else:
-        logging.info(f"[green]Added tag '{new_tag}' locally in '{dependency}'[/green]")
-
-    logging.info(f"[green]To push tag remotely run: dtm tag push {dependency} {new_tag}[/green]")
-    return new_tag
-
-
 @tag_app.command("patch")
 def tag_patch(
     dependency: str = typer.Argument(..., help="Dependency name"),
     description: str = typer.Option(..., "--description", "-d", help="Tag description"),
-    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)")
 ):
     with console.status("[green]Updating dependency tag with patch...[/green]"):
         tag_mgr = TagManager()
@@ -813,14 +602,14 @@ def tag_patch(
             rprint(f"[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
 
-    rprint(f"[green]Dependency tag updated successfully[/green]")
+    rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {new_tag}[/green]")
 
 
 @tag_app.command("minor")
 def tag_minor(
     dependency: str = typer.Argument(..., help="Dependency name"),
     description: str = typer.Option(..., "--description", "-d", help="Tag description"),
-    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)")
 ):
     with console.status("[green]Updating dependency tag with minor bump...[/green]"):
         tag_mgr = TagManager()
@@ -834,14 +623,14 @@ def tag_minor(
             rprint(f"[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
 
-    rprint(f"[green]Dependency tag updated successfully[/green]")
+    rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {new_tag}[/green]")
 
 
 @tag_app.command("major")
 def tag_major(
     dependency: str = typer.Argument(..., help="Dependency name"),
     description: str = typer.Option(..., "--description", "-d", help="Tag description"),
-    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)"),
+    color: Optional[str] = typer.Option(None, "--color", "-c", help="Tag color (hex)")
 ):
     with console.status("[green]Updating dependency tag with major bump...[/green]"):
         tag_mgr = TagManager()
@@ -855,7 +644,22 @@ def tag_major(
             rprint(f"[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
 
-    rprint(f"[green]Dependency tag updated successfully[/green]")
+    rprint(f"[green]To push tag remotely run: dtm tag push {dependency} {new_tag}[/green]")
+
+
+@app.command("branch-cleanup")
+def branchCleanup(
+    dep_name: str = typer.Option(..., "-d", "--dependency", help="Dependency name"),
+    tag_name: str = typer.Option(..., "-t", "--tag", help="Tag name")
+):
+    with console.status("[green]Cleaning up branch...[/green]"):
+        bc = branch_cleanup(dep_name, tag_name)
+            
+    if not bc:    
+        rprint(f"[red]Error:[/red] Failed to cleanup branch, check logs for more information")
+        raise typer.Exit(1)
+    else:
+        rprint(f"[green]Branch 'version/{tag_name}' cleaned up[/green]")
 
 
 @app.command("display")
@@ -866,6 +670,8 @@ def ui():
     app = QApplication(sys.argv)
     window = PackageManagerUI()
     window.show()
+    window.raise_()
+    window.activateWindow()
     sys.exit(app.exec())
 
 

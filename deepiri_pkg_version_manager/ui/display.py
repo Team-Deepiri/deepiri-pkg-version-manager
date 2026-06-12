@@ -14,7 +14,14 @@ from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push, prom
 
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.cli.main import run_command, dependency_tree_check, create_tag, push_tag, remove_tag, update_helper
+from deepiri_pkg_version_manager.utils import (
+    create_tag,
+    dependency_tree_check,
+    push_tag,
+    remove_tag,
+    run_command,
+    update_helper,
+)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -186,14 +193,17 @@ class PackageManagerUI(QMainWindow):
         if not item:
             result = prompt_add(self, self.dependency_registry)
             if result is None:
+                self.error_message("Failed to launch prompt")
                 return
             dep_name, tag_name, description = result
         else:
             dep_name = item.text()
             if not dependency_tree_check(dep_name, self.dependency_registry):
+                self.error_message("Dependency tree check failed")
                 return
             result = prompt_add(self, self.dependency_registry, dep=dep_name)
             if result is None:
+                self.error_message("Failed to launch prompt")
                 return
             tag_name, description = result
 
@@ -215,12 +225,11 @@ class PackageManagerUI(QMainWindow):
         if not item:
             result = prompt_push(self, self.dependency_registry)
             if result is None:
+                self.error_message("Failed to launch prompt")
                 return
             dep_name, tag_name = result
         else:
             dep_name = item.text()
-            if not dependency_tree_check(dep_name, self.dependency_registry):
-                return
             local_tag_item = self.local_tag_list.currentItem()
             remote_tag_item = self.remote_tag_list.currentItem()
             if local_tag_item is None and remote_tag_item is not None:
@@ -229,13 +238,14 @@ class PackageManagerUI(QMainWindow):
             if local_tag_item is None:
                 result = prompt_push(self, self.dependency_registry, dep=dep_name)
                 if result is None:
+                    self.error_message("Failed to launch prompt")
                     return
                 tag_name = result
             else:
                 tag_name = local_tag_item.text().split(' - ')[1]
 
         dep = self.dependency_registry.get(dep_name)
-        if not push_tag(dep_name, self.dependency_registry.get(dep_name).repo_path, self.tag_manager, tag_name):
+        if not push_tag(dep_name, self.dependency_registry.get(dep_name).repo_path, self.tag_manager, self.dependency_registry, tag_name):
             self.error_message("Failed to push tag")
             return
         else:
@@ -253,6 +263,7 @@ class PackageManagerUI(QMainWindow):
         if item is None:
             result = prompt_remove(self, self.dependency_registry)
             if result is None:
+                self.error_message("Failed to launch prompt")
                 return
             dep_name, tag_name = result
         else:
@@ -262,6 +273,7 @@ class PackageManagerUI(QMainWindow):
             if local_tag_item is None and remote_tag_item is None:
                 result = prompt_remove(self, self.dependency_registry, dep=dep_name)
                 if result is None:
+                    self.error_message("Failed to launch prompt")
                     return
                 tag_name = result
             elif local_tag_item is not None and remote_tag_item is None:
@@ -370,6 +382,7 @@ class PackageManagerUI(QMainWindow):
         if not item:
             result = prompt_update(self, self.dependency_registry, type)
             if result is None:
+                self.error_message("Failed to launch prompt")
                 return
             dep_name, description = result
         else:
@@ -379,6 +392,7 @@ class PackageManagerUI(QMainWindow):
                 return
             result = prompt_update(self, self.dependency_registry, type, dep=dep_name)
             if result is None:
+                self.error_message("Failed to launch prompt")
                 return
             description = result
 

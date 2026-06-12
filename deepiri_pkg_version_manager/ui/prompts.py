@@ -4,7 +4,14 @@ from PySide6.QtWidgets import (
 )
 
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
-from deepiri_pkg_version_manager.cli.main import dependency_tree_check, check_valid_tag, push_sanitization, check_valid_format, run_command
+from deepiri_pkg_version_manager.utils import (
+    check_valid_format,
+    check_valid_tag,
+    dependency_tree_check,
+    push_sanitization,
+    remove_check,
+    run_command,
+)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -190,7 +197,7 @@ def prompt_remove(parent, dependency_mgr: DependencyRegistry, dep: str = None):
                 "Please enter a dependency name.",
             )
             return
-        if dep is None and not dependency_tree_check(dep_edit.text().strip(), dependency_mgr):
+        if dep is None and not remove_check(dep_edit.text().strip(), dependency_mgr):
             QMessageBox.warning(
                 parent,
                 "Dependency Error",

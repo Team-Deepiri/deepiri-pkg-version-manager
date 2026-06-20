@@ -613,7 +613,9 @@ def tag_patch(
             rprint("[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
         _dep = registry.get(dependency)
-        assert _dep is not None
+        if _dep is None:
+            rprint("[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
         dep_path = _dep.repo_path
         new_tag = update_helper(dependency, tag_mgr, dep_path, "patch", description, color)
         if new_tag is None:
@@ -637,7 +639,9 @@ def tag_minor(
             rprint("[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
         _dep = registry.get(dependency)
-        assert _dep is not None
+        if _dep is None:
+            rprint("[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
         dep_path = _dep.repo_path
         new_tag = update_helper(dependency, tag_mgr, dep_path, "minor", description, color)
         if new_tag is None:
@@ -661,7 +665,9 @@ def tag_major(
             rprint("[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
         _dep = registry.get(dependency)
-        assert _dep is not None
+        if _dep is None:
+            rprint("[red]Error:[/red] Check logs for more information")
+            raise typer.Exit(1)
         dep_path = _dep.repo_path
         new_tag = update_helper(dependency, tag_mgr, dep_path, "major", description, color)
         if new_tag is None:

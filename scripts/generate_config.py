@@ -2,12 +2,6 @@ import json
 import os
 import re
 import subprocess
-import sys
-
-if sys.version_info >= (3, 11):
-    pass
-else:
-    pass
 
 ORG = "Team-Deepiri"
 CLONE_DIR = "./repos"

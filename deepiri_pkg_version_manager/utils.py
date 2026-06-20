@@ -816,11 +816,7 @@ def branch_cleanup(dependency: str, tag_name: str) -> bool:
         logging.error(f"[red]Error:[/red] Dependency '{dependency}' not found")
         return False
     dep_path = dep.repo_path
-    if dep_path is None:
-        logging.error(f"[red]Error:[/red] Dependency '{dependency}' not found")
-        return False
-    else:
-        logging.info(f"[green]Dependency '{dependency}' found at '{dep_path}'[/green]")
+    logging.info(f"[green]Dependency '{dependency}' found at '{dep_path}'[/green]")
 
     pt1 = 0
     check_exists_locally = run_command(["git", "branch", "--list", branch], dep_path)

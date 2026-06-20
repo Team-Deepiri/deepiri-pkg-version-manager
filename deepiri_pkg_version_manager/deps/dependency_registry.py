@@ -1,21 +1,20 @@
-from typing import Optional
-from uuid import UUID
-from rich.console import Console
-from rich.table import Table
 import json
+from uuid import UUID
 
-from .dependency_models import Dependency, DependencyDetail
-from ..tags.tag_models import Tag, TagWithCount
+from rich.console import Console
+
+from ..graph.dependency_graph import DependencyGraph
 from ..scanners.repo_scanner import ScannedDependency
 from ..storage.db import (
     DependencyDB,
-    TagDB,
-    DependencyTagDB,
     DependencyEdgeDB,
+    DependencyTagDB,
+    TagDB,
     get_session,
     init_db,
 )
-from ..graph.dependency_graph import DependencyGraph
+from ..tags.tag_models import Tag
+from .dependency_models import Dependency, DependencyDetail
 
 console = Console()
 
@@ -30,15 +29,14 @@ class DependencyRegistry:
         name: str,
         repo_path: str,
         package_type: str = "npm",
-        version: str = None,
-        description: str = None,
-        git_url: str = None,
-        git_rev: str = None,
-        git_tag: str = None,
-        git_tags: list[str] = None,
+        version: str | None = None,
+        description: str | None = None,
+        git_url: str | None = None,
+        git_rev: str | None = None,
+        git_tag: str | None = None,
+        git_tags: list[str] | None = None,
         is_submodule: bool = False,
     ) -> Dependency:
-        import json
         existing = self.session.query(DependencyDB).filter_by(name=name).first()
         git_tags_json = json.dumps(git_tags) if git_tags else "[]"
         if existing:
@@ -53,7 +51,7 @@ class DependencyRegistry:
             existing.is_submodule = is_submodule
             self.session.commit()
             return self._db_to_model(existing)
-        
+
         db = DependencyDB(
             name=name,
             repo_path=repo_path,
@@ -100,7 +98,7 @@ class DependencyRegistry:
             results.append(result)
         return results
 
-    def get(self, name: str) -> Optional[Dependency]:
+    def get(self, name: str) -> Dependency | None:
         db = self.session.query(DependencyDB).filter_by(name=name).first()
         if db:
             return self._db_to_model(db)
@@ -114,11 +112,11 @@ class DependencyRegistry:
         dbs = self.session.query(DependencyDB).filter_by(package_type=package_type).all()
         return [self._db_to_model(db) for db in dbs]
 
-    def get_detail(self, name: str) -> Optional[DependencyDetail]:
+    def get_detail(self, name: str) -> DependencyDetail | None:
         db = self.session.query(DependencyDB).filter_by(name=name).first()
         if not db:
             return None
-        
+
         dep_dict = {
             "id": db.id,
             "name": db.name,
@@ -131,23 +129,26 @@ class DependencyRegistry:
             "git_tag": db.git_tag,
             "is_submodule": db.is_submodule,
         }
-        
-        tag_dbs = self.session.query(TagDB).join(DependencyTagDB).filter(
-            DependencyTagDB.dependency_id == str(db.id)
-        ).all()
+
+        tag_dbs = (
+            self.session.query(TagDB)
+            .join(DependencyTagDB)
+            .filter(DependencyTagDB.dependency_id == str(db.id))
+            .all()
+        )
         tags = [self._tag_db_to_model(tdb) for tdb in tag_dbs]
-        
+
         graph = self.build_graph()
         dependencies = graph.get_dependencies(name)
         dependents = graph.get_dependents(name)
-        
+
         dep_dict["tags"] = tags
         dep_dict["dependencies"] = dependencies
         dep_dict["dependents"] = dependents
-        
+
         return DependencyDetail(**dep_dict)
 
-    def update_version(self, name: str, version: str, git_rev: str = None) -> bool:
+    def update_version(self, name: str, version: str, git_rev: str | None = None) -> bool:
         db = self.session.query(DependencyDB).filter_by(name=name).first()
         if db:
             db.version = version
@@ -164,18 +165,18 @@ class DependencyRegistry:
                 DependencyTagDB.dependency_id == db.id
             ).delete()
             self.session.query(DependencyEdgeDB).filter(
-                (DependencyEdgeDB.from_dependency_id == db.id) |
-                (DependencyEdgeDB.to_dependency_id == db.id)
+                (DependencyEdgeDB.from_dependency_id == db.id)
+                | (DependencyEdgeDB.to_dependency_id == db.id)
             ).delete()
             self.session.delete(db)
             self.session.commit()
             return True
         return False
 
-    def add_edge(self, from_name: str, to_name: str, version_constraint: str = None):
+    def add_edge(self, from_name: str, to_name: str, version_constraint: str | None = None):
         from_db = self.session.query(DependencyDB).filter_by(name=from_name).first()
         to_db = self.session.query(DependencyDB).filter_by(name=to_name).first()
-        
+
         if from_db and to_db:
             edge = DependencyEdgeDB(
                 from_dependency_id=from_db.id,
@@ -194,33 +195,32 @@ class DependencyRegistry:
 
     def build_graph(self) -> DependencyGraph:
         graph = DependencyGraph()
-        
+
         deps = self.get_all()
         for dep in deps:
             graph.add_node(str(dep.id), name=dep.name)
-        
+
         edges = self.session.query(DependencyEdgeDB).all()
         for edge in edges:
             graph.add_edge(edge.from_dependency_id, edge.to_dependency_id)
-        
+
         return graph
 
     def get_outdated(self) -> list[tuple[Dependency, Dependency]]:
         """Get pairs of (current, wanted) outdated dependencies."""
         outdated = []
         graph = self.build_graph()
-        
+
         for dep in self.get_all():
             wanted = graph.get_dependencies(dep.name)
             for want_name in wanted:
                 wanted_dep = self.get(want_name)
                 if wanted_dep and dep.version != wanted_dep.version:
                     outdated.append((dep, wanted_dep))
-        
+
         return outdated
 
     def _db_to_model(self, db: DependencyDB) -> Dependency:
-        import json
         try:
             git_tags = json.loads(db.git_tags) if db.git_tags else []
         except json.JSONDecodeError:

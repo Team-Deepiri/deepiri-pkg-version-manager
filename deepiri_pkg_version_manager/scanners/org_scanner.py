@@ -1,15 +1,14 @@
 import logging
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
 
-from deepiri_pkg_version_manager.utils import run_command
 from deepiri_pkg_version_manager.scanners.repo_scanner import (
     ScannedDependency,
     scan_directory,
 )
+from deepiri_pkg_version_manager.utils import run_command
 
 console = Console()
 
@@ -25,7 +24,7 @@ def list_org_repos(org: str) -> list[str]:
     return [line.strip() for line in output.splitlines() if line.strip()]
 
 
-def clone_repo(org: str, repo: str, base_dir: Path = CLONE_DIR) -> Optional[Path]:
+def clone_repo(org: str, repo: str, base_dir: Path = CLONE_DIR) -> Path | None:
     base_dir.mkdir(parents=True, exist_ok=True)
     target = base_dir / repo
 
@@ -40,8 +39,8 @@ def clone_repo(org: str, repo: str, base_dir: Path = CLONE_DIR) -> Optional[Path
 
 def scan_org(
     org: str,
-    repo: Optional[str] = None,
-    package_types: Optional[list[str]] = None,
+    repo: str | None = None,
+    package_types: list[str] | None = None,
     verbose: bool = False,
     base_dir: Path = CLONE_DIR,
 ) -> list[ScannedDependency]:

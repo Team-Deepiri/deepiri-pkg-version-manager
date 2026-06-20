@@ -1,11 +1,10 @@
 import json
 import re
-import os
 import subprocess
 import sys
-from pathlib import Path
-from typing import Optional, Literal
 from dataclasses import dataclass, field
+from pathlib import Path
+
 from rich.console import Console
 
 if sys.version_info >= (3, 11):
@@ -21,15 +20,15 @@ class ScannedDependency:
     name: str
     repo_path: str
     package_type: str  # "npm", "poetry", "pip"
-    version: Optional[str] = None
-    description: Optional[str] = None
+    version: str | None = None
+    description: str | None = None
     dependencies: list[str] = field(default_factory=list)
-    git_url: Optional[str] = None
-    git_rev: Optional[str] = None
-    git_tag: Optional[str] = None
+    git_url: str | None = None
+    git_rev: str | None = None
+    git_tag: str | None = None
     git_tags: list[str] = field(default_factory=list)
     is_submodule: bool = False
-    submodule_path: Optional[str] = None
+    submodule_path: str | None = None
 
 
 def normalize_package_name(name: str) -> str:
@@ -80,79 +79,75 @@ def is_internal_dep(dep_name: str) -> bool:
     return any(re.match(p, dep_name) for p in patterns)
 
 
-def extract_git_info(repo_path: Path) -> tuple[Optional[str], Optional[str], Optional[str], list[str]]:
+def extract_git_info(repo_path: Path) -> tuple[str | None, str | None, str | None, list[str]]:
     """Extract git URL, current revision, current tag, and all tags from a repo."""
     git_url = None
     git_rev = None
     git_tag = None
     git_tags = []
-    
+
     try:
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
             cwd=repo_path,
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
         )
         if result.returncode == 0:
             git_url = result.stdout.strip()
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
-    
+
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            timeout=5
+            ["git", "rev-parse", "HEAD"], cwd=repo_path, capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0:
             git_rev = result.stdout.strip()[:8]
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
-    
+
     try:
         result = subprocess.run(
             ["git", "describe", "--tags", "--always"],
             cwd=repo_path,
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
         )
         if result.returncode == 0:
             git_tag = result.stdout.strip()
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
-    
+
     try:
         result = subprocess.run(
             ["git", "tag", "-l", "--sort=-version:refname"],
             cwd=repo_path,
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
         )
         if result.returncode == 0:
             git_tags = [t.strip() for t in result.stdout.strip().split("\n") if t.strip()]
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
-    
+
     return git_url, git_rev, git_tag, git_tags
 
 
 def check_git_submodules(repo_path: Path) -> list[dict]:
     """Check if repo has git submodules."""
     submodules = []
-    
+
     try:
         result = subprocess.run(
             ["git", "submodule", "status"],
             cwd=repo_path,
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
         if result.returncode == 0:
             for line in result.stdout.strip().split("\n"):
@@ -162,17 +157,19 @@ def check_git_submodules(repo_path: Path) -> list[dict]:
                         rev = parts[0]
                         path = parts[1]
                         if is_internal_dep(path.split("/")[-1] if "/" in path else path):
-                            submodules.append({
-                                "path": path,
-                                "rev": rev,
-                            })
+                            submodules.append(
+                                {
+                                    "path": path,
+                                    "rev": rev,
+                                }
+                            )
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
-    
+
     return submodules
 
 
-def scan_package_json(repo_path: Path) -> Optional[ScannedDependency]:
+def scan_package_json(repo_path: Path) -> ScannedDependency | None:
     """Scan package.json for npm/Node.js dependencies."""
     package_json = repo_path / "package.json"
     if not package_json.exists():
@@ -189,9 +186,7 @@ def scan_package_json(repo_path: Path) -> Optional[ScannedDependency]:
 
         deps = data.get("dependencies", {})
         internal_deps = [
-            _dependency_registry_key(dep)
-            for dep in deps.keys()
-            if is_internal_dep(dep)
+            _dependency_registry_key(dep) for dep in deps.keys() if is_internal_dep(dep)
         ]
 
         git_url, git_rev, git_tag, git_tags = extract_git_info(repo_path)
@@ -218,12 +213,12 @@ def scan_package_json(repo_path: Path) -> Optional[ScannedDependency]:
 
         return result
 
-    except (json.JSONDecodeError, IOError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         console.print(f"[yellow]Warning:[/yellow] Failed to parse {package_json}: {e}")
         return None
 
 
-def scan_pyproject_toml(repo_path: Path) -> Optional[ScannedDependency]:
+def scan_pyproject_toml(repo_path: Path) -> ScannedDependency | None:
     """Scan pyproject.toml for Poetry or pip dependencies."""
     pyproject = repo_path / "pyproject.toml"
     if not pyproject.exists():
@@ -235,12 +230,12 @@ def scan_pyproject_toml(repo_path: Path) -> Optional[ScannedDependency]:
 
         project = data.get("project", {})
         poetry = data.get("tool", {}).get("poetry", {})
-        
+
         raw_name = project.get("name") or poetry.get("name") or repo_path.name
         name = canonical_registry_name(str(raw_name)) or repo_path.name
         version = project.get("version") or poetry.get("version")
         description = project.get("description") or poetry.get("description")
-        
+
         is_poetry = bool(poetry.get("dependencies"))
 
         internal_deps = []
@@ -286,7 +281,7 @@ def scan_pyproject_toml(repo_path: Path) -> Optional[ScannedDependency]:
         return None
 
 
-def extract_git_dependency(dep_value) -> Optional[dict]:
+def extract_git_dependency(dep_value) -> dict | None:
     """Extract git info from Poetry git dependency."""
     if isinstance(dep_value, dict):
         git_url = dep_value.get("git")
@@ -304,11 +299,11 @@ def scan_poetry_lock(repo_path: Path) -> dict:
     lock_file = repo_path / "poetry.lock"
     if not lock_file.exists():
         return {}
-    
+
     try:
         with open(lock_file, "rb") as f:
             data = tomllib.load(f)
-        
+
         locked = {}
         for package in data.get("package", []):
             name = package.get("name", "")
@@ -320,10 +315,10 @@ def scan_poetry_lock(repo_path: Path) -> dict:
         return {}
 
 
-def scan_requirements_txt(repo_path: Path) -> Optional[ScannedDependency]:
+def scan_requirements_txt(repo_path: Path) -> ScannedDependency | None:
     """Scan requirements.txt for pip dependencies."""
     req_files = ["requirements.txt", "requirements-dev.txt", "requirements-test.txt"]
-    
+
     for req_file in req_files:
         req_path = repo_path / req_file
         if req_path.exists():
@@ -334,20 +329,20 @@ def scan_requirements_txt(repo_path: Path) -> Optional[ScannedDependency]:
     try:
         internal_deps = []
         version = None
-        
+
         with open(req_path) as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                
+
                 # Handle various formats: package==1.0.0, package>=1.0, git+https://...
                 match = re.match(r"^([a-zA-Z0-9_-]+)", line)
                 if match:
                     pkg_name = match.group(1)
                     if is_internal_dep(pkg_name):
                         internal_deps.append(_dependency_registry_key(pkg_name))
-                
+
                 # Extract version if available
                 if not version:
                     vmatch = re.search(r"==([0-9.]+)", line)
@@ -375,7 +370,7 @@ def scan_requirements_txt(repo_path: Path) -> Optional[ScannedDependency]:
         return None
 
 
-def scan_pipfile(repo_path: Path) -> Optional[ScannedDependency]:
+def scan_pipfile(repo_path: Path) -> ScannedDependency | None:
     """Scan Pipfile for pipenv dependencies."""
     pipfile = repo_path / "Pipfile"
     if not pipfile.exists():
@@ -387,9 +382,9 @@ def scan_pipfile(repo_path: Path) -> Optional[ScannedDependency]:
 
         packages = data.get("packages", {})
         dev_packages = data.get("dev-packages", {})
-        
+
         all_deps = {**packages, **dev_packages}
-        
+
         internal_deps = []
         for dep_name, dep_value in all_deps.items():
             if is_internal_dep(dep_name):
@@ -440,7 +435,7 @@ def scan_directory(
 
     # Scan all subdirectories
     scan_dirs = [root_path]
-    
+
     # Add submodule paths
     for sm in submodules:
         submodule_full_path = root_path / sm["path"]
@@ -453,7 +448,16 @@ def scan_directory(
                 continue
 
             # Skip hidden and common ignore directories
-            skip_dirs = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build", ".tox"}
+            skip_dirs = {
+                ".git",
+                "node_modules",
+                "__pycache__",
+                ".venv",
+                "venv",
+                "dist",
+                "build",
+                ".tox",
+            }
             if any(skip in subdir.parts for skip in skip_dirs):
                 continue
 
@@ -462,10 +466,10 @@ def scan_directory(
             # Try each scanner based on package_types
             if "npm" in package_types:
                 result = scan_package_json(subdir)
-            
+
             if not result and "poetry" in package_types:
                 result = scan_pyproject_toml(subdir)
-            
+
             if not result and "pip" in package_types:
                 result = scan_pipfile(subdir) or scan_requirements_txt(subdir)
 
@@ -505,7 +509,7 @@ def scan_directory(
 def get_install_command(dep: ScannedDependency, package_manager: str = None) -> str:
     """Generate install command for a dependency based on its type."""
     pkg_type = package_manager or dep.package_type
-    
+
     if pkg_type == "npm" or dep.package_type == "npm":
         if dep.git_tag:
             return f"npm install {dep.name}@{dep.git_tag}"
@@ -514,7 +518,7 @@ def get_install_command(dep: ScannedDependency, package_manager: str = None) -> 
         elif dep.version:
             return f"npm install {dep.name}@{dep.version}"
         return f"npm install {dep.name}"
-    
+
     elif pkg_type in ("poetry", "pip") or dep.package_type in ("poetry", "pip"):
         if dep.git_tag:
             return f"poetry add git@{dep.git_url}#{dep.git_tag}"
@@ -524,7 +528,7 @@ def get_install_command(dep: ScannedDependency, package_manager: str = None) -> 
         elif dep.version:
             return f"poetry add {dep.name}@{dep.version}"
         return f"poetry add {dep.name}"
-    
+
     elif pkg_type == "pipenv" or dep.package_type == "pipenv":
         if dep.git_url:
             rev = dep.git_rev or "main"
@@ -532,7 +536,7 @@ def get_install_command(dep: ScannedDependency, package_manager: str = None) -> 
         elif dep.version:
             return f"pipenv install {dep.name}=={dep.version}"
         return f"pipenv install {dep.name}"
-    
+
     elif pkg_type == "pip":
         if dep.git_url:
             rev = dep.git_rev or "main"
@@ -540,26 +544,26 @@ def get_install_command(dep: ScannedDependency, package_manager: str = None) -> 
         elif dep.version:
             return f"pip install {dep.name}=={dep.version}"
         return f"pip install {dep.name}"
-    
+
     return f"# Unknown package type: {dep.package_type}"
 
 
 def get_install_all_command(dep: ScannedDependency, package_manager: str = None) -> str:
     """Generate install all dependencies command for a package."""
     pkg_type = package_manager or dep.package_type
-    
+
     if pkg_type == "npm" or dep.package_type == "npm":
         return f"cd {dep.repo_path} && npm install"
-    
+
     elif pkg_type in ("poetry", "pip") or dep.package_type in ("poetry", "pip"):
         return f"cd {dep.repo_path} && poetry install"
-    
+
     elif pkg_type == "pipenv" or dep.package_type == "pipenv":
         return f"cd {dep.repo_path} && pipenv install"
-    
+
     elif pkg_type == "pip":
         return f"cd {dep.repo_path} && pip install -r requirements.txt"
-    
+
     return f"# Unknown package type: {dep.package_type}"
 
 
@@ -567,11 +571,11 @@ def version_sync_needed(registry_dep: ScannedDependency, current_dep: ScannedDep
     """Check if version sync is needed between two dependencies."""
     if not registry_dep.version or not current_dep.version:
         return False
-    
+
     if registry_dep.version != current_dep.version:
         return True
-    
+
     if registry_dep.git_rev and current_dep.git_rev:
         return registry_dep.git_rev != current_dep.git_rev
-    
+
     return False

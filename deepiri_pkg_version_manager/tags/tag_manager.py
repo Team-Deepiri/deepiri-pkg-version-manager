@@ -1,15 +1,15 @@
-from typing import Optional
 from uuid import UUID
+
 from rich.console import Console
 
-from .tag_models import Tag, TagWithCount
 from ..storage.db import (
     DependencyDB,
-    TagDB,
     DependencyTagDB,
+    TagDB,
     get_session,
     init_db,
 )
+from .tag_models import Tag, TagWithCount
 
 console = Console()
 
@@ -31,7 +31,7 @@ class TagManager:
             existing.color = color
             self.session.commit()
             return self._db_to_model(existing)
-        
+
         db = TagDB(
             name=name,
             description=description,
@@ -41,7 +41,7 @@ class TagManager:
         self.session.commit()
         return self._db_to_model(db)
 
-    def get_tag(self, name: str) -> Optional[Tag]:
+    def get_tag(self, name: str) -> Tag | None:
         db = self.session.query(TagDB).filter_by(name=name).first()
         if db:
             return self._db_to_model(db)
@@ -62,18 +62,22 @@ class TagManager:
     def add_tag_to_dependency(self, dep_name: str, tag_name: str) -> bool:
         dep_db = self.session.query(DependencyDB).filter_by(name=dep_name).first()
         tag_db = self.session.query(TagDB).filter_by(name=tag_name).first()
-        
+
         if not dep_db or not tag_db:
             return False
-        
-        existing = self.session.query(DependencyTagDB).filter_by(
-            dependency_id=dep_db.id,
-            tag_id=tag_db.id,
-        ).first()
-        
+
+        existing = (
+            self.session.query(DependencyTagDB)
+            .filter_by(
+                dependency_id=dep_db.id,
+                tag_id=tag_db.id,
+            )
+            .first()
+        )
+
         if existing:
             return True
-        
+
         link = DependencyTagDB(
             dependency_id=dep_db.id,
             tag_id=tag_db.id,
@@ -85,15 +89,19 @@ class TagManager:
     def remove_tag_from_dependency(self, dep_name: str, tag_name: str) -> bool:
         dep_db = self.session.query(DependencyDB).filter_by(name=dep_name).first()
         tag_db = self.session.query(TagDB).filter_by(name=tag_name).first()
-        
+
         if not dep_db or not tag_db:
             return False
-        
-        link = self.session.query(DependencyTagDB).filter_by(
-            dependency_id=dep_db.id,
-            tag_id=tag_db.id,
-        ).first()
-        
+
+        link = (
+            self.session.query(DependencyTagDB)
+            .filter_by(
+                dependency_id=dep_db.id,
+                tag_id=tag_db.id,
+            )
+            .first()
+        )
+
         if link:
             self.session.delete(link)
             self.session.commit()
@@ -104,21 +112,29 @@ class TagManager:
         dep_db = self.session.query(DependencyDB).filter_by(name=dep_name).first()
         if not dep_db:
             return []
-        
-        tag_dbs = self.session.query(TagDB).join(DependencyTagDB).filter(
-            DependencyTagDB.dependency_id == dep_db.id
-        ).all()
-        
+
+        tag_dbs = (
+            self.session.query(TagDB)
+            .join(DependencyTagDB)
+            .filter(DependencyTagDB.dependency_id == dep_db.id)
+            .all()
+        )
+
         return [self._db_to_model(db) for db in tag_dbs]
 
     def check_tag_exists_in_dependency(self, dep_name: str, tag_name: str) -> bool:
         dep_db = self.session.query(DependencyDB).filter_by(name=dep_name).first()
         tag_db = self.session.query(TagDB).filter_by(name=tag_name).first()
-        
+
         if not dep_db or not tag_db:
             return False
-        
-        return self.session.query(DependencyTagDB).filter_by(dependency_id=dep_db.id, tag_id=tag_db.id).first() is not None
+
+        return (
+            self.session.query(DependencyTagDB)
+            .filter_by(dependency_id=dep_db.id, tag_id=tag_db.id)
+            .first()
+            is not None
+        )
 
     def delete_tag(self, name: str) -> bool:
         db = self.session.query(TagDB).filter_by(name=name).first()

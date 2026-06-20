@@ -4,6 +4,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Protocol
 
 from rich.console import Console
 
@@ -506,7 +507,18 @@ def scan_directory(
     return all_results
 
 
-def get_install_command(dep: ScannedDependency, package_manager: str | None = None) -> str:
+class InstallablePackage(Protocol):
+    name: str
+    repo_path: str
+    package_type: str
+    version: str | None
+    git_url: str | None
+    git_rev: str | None
+    git_tag: str | None
+    is_submodule: bool
+
+
+def get_install_command(dep: InstallablePackage, package_manager: str | None = None) -> str:
     """Generate install command for a dependency based on its type."""
     pkg_type = package_manager or dep.package_type
 
@@ -548,7 +560,7 @@ def get_install_command(dep: ScannedDependency, package_manager: str | None = No
     return f"# Unknown package type: {dep.package_type}"
 
 
-def get_install_all_command(dep: ScannedDependency, package_manager: str | None = None) -> str:
+def get_install_all_command(dep: InstallablePackage, package_manager: str | None = None) -> str:
     """Generate install all dependencies command for a package."""
     pkg_type = package_manager or dep.package_type
 

@@ -1,3 +1,5 @@
+from typing import cast
+
 import networkx as nx
 
 
@@ -18,37 +20,43 @@ class DependencyGraph:
         return self._name_to_id.get(name)
 
     def get_node_name(self, node_id: str) -> str | None:
-        return self.graph.nodes[node_id].get("name")
+        return cast("str | None", self.graph.nodes[node_id].get("name"))
 
     def get_dependencies(self, name: str) -> list[str]:
         node_id = self.get_node_id(name)
         if node_id is None:
             return []
-        return [self.get_node_name(succ) for succ in self.graph.successors(node_id)]
+        return [
+            n
+            for succ in self.graph.successors(node_id)
+            if (n := self.get_node_name(succ)) is not None
+        ]
 
     def get_dependents(self, name: str) -> list[str]:
         node_id = self.get_node_id(name)
         if node_id is None:
             return []
-        return [self.get_node_name(pred) for pred in self.graph.predecessors(node_id)]
+        return [
+            n
+            for pred in self.graph.predecessors(node_id)
+            if (n := self.get_node_name(pred)) is not None
+        ]
 
     def get_all_dependents_recursive(self, name: str) -> set[str]:
         node_id = self.get_node_id(name)
         if node_id is None:
             return set()
 
-        # Find all nodes that can reach this node (predecessors)
         descendants = nx.descendants(self.graph.reverse(copy=False), node_id)
-        return {self.get_node_name(n) for n in descendants if self.get_node_name(n)}
+        return {n for node in descendants if (n := self.get_node_name(node)) is not None}
 
     def get_all_dependencies_recursive(self, name: str) -> set[str]:
         node_id = self.get_node_id(name)
         if node_id is None:
             return set()
 
-        # Find all nodes reachable from this node (successors)
         ancestors = nx.descendants(self.graph, node_id)
-        return {self.get_node_name(n) for n in ancestors if self.get_node_name(n)}
+        return {n for node in ancestors if (n := self.get_node_name(node)) is not None}
 
     def has_cycle(self) -> bool:
         try:
@@ -61,7 +69,7 @@ class DependencyGraph:
         try:
             cycles = list(nx.simple_cycles(self.graph))
             return [
-                [self.get_node_name(n) for n in cycle if self.get_node_name(n)]
+                [n for node in cycle if (n := self.get_node_name(node)) is not None]
                 for cycle in cycles
                 if cycle
             ]
@@ -69,12 +77,12 @@ class DependencyGraph:
             return []
 
     def get_roots(self) -> list[str]:
-        roots = [n for n in self.graph.nodes if self.graph.in_degree(n) == 0]
-        return [self.get_node_name(r) for r in roots if self.get_node_name(r)]
+        roots = [node for node in self.graph.nodes if self.graph.in_degree(node) == 0]
+        return [n for node in roots if (n := self.get_node_name(node)) is not None]
 
     def get_leaves(self) -> list[str]:
-        leaves = [n for n in self.graph.nodes if self.graph.out_degree(n) == 0]
-        return [self.get_node_name(node) for node in leaves if self.get_node_name(node)]
+        leaves = [node for node in self.graph.nodes if self.graph.out_degree(node) == 0]
+        return [n for node in leaves if (n := self.get_node_name(node)) is not None]
 
     def to_tree_string(self, root: str | None = None, indent: str = "") -> str:
         if self.graph.number_of_nodes() == 0:

@@ -1,15 +1,16 @@
-from pathlib import Path
-from sqlalchemy import create_engine, Column, String, Text, DateTime, ForeignKey, Boolean
-from sqlalchemy.orm import declarative_base, sessionmaker
-from datetime import datetime
 import uuid
+from datetime import datetime
+from pathlib import Path
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 Base = declarative_base()
 
 
 class DependencyDB(Base):
     __tablename__ = "dependencies"
-    
+
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False, unique=True, index=True)
     repo_path = Column(String(512), nullable=False)
@@ -28,7 +29,7 @@ class DependencyDB(Base):
 
 class TagDB(Base):
     __tablename__ = "tags"
-    
+
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(100), nullable=False, unique=True, index=True)
     description = Column(Text)
@@ -38,14 +39,14 @@ class TagDB(Base):
 
 class DependencyTagDB(Base):
     __tablename__ = "dependency_tags"
-    
+
     dependency_id = Column(String(36), ForeignKey("dependencies.id"), primary_key=True)
     tag_id = Column(String(36), ForeignKey("tags.id"), primary_key=True)
 
 
 class DependencyEdgeDB(Base):
     __tablename__ = "dependency_edges"
-    
+
     from_dependency_id = Column(String(36), ForeignKey("dependencies.id"), primary_key=True)
     to_dependency_id = Column(String(36), ForeignKey("dependencies.id"), primary_key=True)
     version_constraint = Column(String(100))
@@ -76,5 +77,5 @@ def init_db(engine=None):
 def get_session(engine=None):
     if engine is None:
         engine = get_engine()
-    Session = sessionmaker(bind=engine)
-    return Session()
+    session_factory = sessionmaker(bind=engine)
+    return session_factory()

@@ -1,19 +1,32 @@
+import logging
+
+from packaging.version import Version
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget,
-    QVBoxLayout, QHBoxLayout, QListWidget,
-    QTableWidget, QTableWidgetItem,
-    QPushButton, QLabel, QSplitter, QHeaderView,
-    QMessageBox
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QListWidget,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QEvent
 from rich import print as rprint
 from rich.console import Console
-from packaging.version import Version
 
-from deepiri_pkg_version_manager.ui.prompts import prompt_add, prompt_push, prompt_remove, prompt_update
-
-from deepiri_pkg_version_manager.tags.tag_manager import TagManager
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
+from deepiri_pkg_version_manager.tags.tag_manager import TagManager
+from deepiri_pkg_version_manager.ui.prompts import (
+    prompt_add,
+    prompt_push,
+    prompt_remove,
+    prompt_update,
+)
 from deepiri_pkg_version_manager.utils import (
     create_tag,
     dependency_tree_check,
@@ -23,7 +36,6 @@ from deepiri_pkg_version_manager.utils import (
     update_helper,
 )
 
-import logging
 logger = logging.getLogger(__name__)
 
 console = Console()
@@ -57,7 +69,9 @@ class PackageManagerUI(QMainWindow):
             self.dep_list = QListWidget()
             self.dependencies = self.dependency_registry.get_all()
             self.dep_list.addItems([dep.name for dep in self.dependencies])
-            self.row_for_dependencies = {dep.name: index for index, dep in enumerate(self.dependencies)}
+            self.row_for_dependencies = {
+                dep.name: index for index, dep in enumerate(self.dependencies)
+            }
             self.dep_list.viewport().installEventFilter(self)
             splitter.addWidget(self.dep_list)
 
@@ -68,9 +82,9 @@ class PackageManagerUI(QMainWindow):
             right_layout = QVBoxLayout()
 
             self.table = QTableWidget(0, 4)
-            self.table.setHorizontalHeaderLabels([
-                "Name", "Remote Version", "Local Version", "Status"
-            ])
+            self.table.setHorizontalHeaderLabels(
+                ["Name", "Remote Version", "Local Version", "Status"]
+            )
             table_header = self.table.horizontalHeader()
             table_header.setSectionsMovable(False)
             for col in range(4):
@@ -132,7 +146,7 @@ class PackageManagerUI(QMainWindow):
             self.patch_btn.clicked.connect(self.on_patch)
             self.minor_btn.clicked.connect(self.on_minor)
             self.major_btn.clicked.connect(self.on_major)
-            
+
         rprint("[green]UI launched successfully[/green]")
 
     def showEvent(self, event):
@@ -163,11 +177,17 @@ class PackageManagerUI(QMainWindow):
                 self.dep_list.clearSelection()
                 self.dep_list.setCurrentItem(None)
                 return True
-            if obj == self.local_tag_list.viewport() and not self.local_tag_list.indexAt(event.pos()).isValid():
+            if (
+                obj == self.local_tag_list.viewport()
+                and not self.local_tag_list.indexAt(event.pos()).isValid()
+            ):
                 self.local_tag_list.clearSelection()
                 self.local_tag_list.setCurrentItem(None)
                 return True
-            if obj == self.remote_tag_list.viewport() and not self.remote_tag_list.indexAt(event.pos()).isValid():
+            if (
+                obj == self.remote_tag_list.viewport()
+                and not self.remote_tag_list.indexAt(event.pos()).isValid()
+            ):
                 self.remote_tag_list.clearSelection()
                 self.remote_tag_list.setCurrentItem(None)
                 return True
@@ -207,14 +227,20 @@ class PackageManagerUI(QMainWindow):
                 return
             tag_name, description = result
 
-        if not create_tag(dep_name, self.tag_manager, self.dependency_registry, tag_name, description):
+        if not create_tag(
+            dep_name, self.tag_manager, self.dependency_registry, tag_name, description
+        ):
             self.error_message("Failed to create tag")
             return
         else:
             self.local_tags[dep_name].insert(0, tag_name)
             self.table.setItem(self.row_for_dependencies[dep_name], 2, QTableWidgetItem(tag_name))
             remote_tag = self.table.item(self.row_for_dependencies[dep_name], 1).text()
-            self.table.setItem(self.row_for_dependencies[dep_name], 3, QTableWidgetItem(self.get_status(remote_tag, tag_name)))
+            self.table.setItem(
+                self.row_for_dependencies[dep_name],
+                3,
+                QTableWidgetItem(self.get_status(remote_tag, tag_name)),
+            )
             if item:
                 self.local_tag_list.insertItem(0, f" - {tag_name}")
 
@@ -242,17 +268,26 @@ class PackageManagerUI(QMainWindow):
                     return
                 tag_name = result
             else:
-                tag_name = local_tag_item.text().split(' - ')[1]
+                tag_name = local_tag_item.text().split(" - ")[1]
 
-        dep = self.dependency_registry.get(dep_name)
-        if not push_tag(dep_name, self.dependency_registry.get(dep_name).repo_path, self.tag_manager, self.dependency_registry, tag_name):
+        if not push_tag(
+            dep_name,
+            self.dependency_registry.get(dep_name).repo_path,
+            self.tag_manager,
+            self.dependency_registry,
+            tag_name,
+        ):
             self.error_message("Failed to push tag")
             return
         else:
             self.remote_tags[dep_name].insert(0, tag_name)
             self.table.setItem(self.row_for_dependencies[dep_name], 1, QTableWidgetItem(tag_name))
             local_tag = self.table.item(self.row_for_dependencies[dep_name], 2).text()
-            self.table.setItem(self.row_for_dependencies[dep_name], 3, QTableWidgetItem(self.get_status(tag_name, local_tag)))
+            self.table.setItem(
+                self.row_for_dependencies[dep_name],
+                3,
+                QTableWidgetItem(self.get_status(tag_name, local_tag)),
+            )
             if item:
                 self.remote_tag_list.insertItem(0, f" - {tag_name}")
 
@@ -277,14 +312,16 @@ class PackageManagerUI(QMainWindow):
                     return
                 tag_name = result
             elif local_tag_item is not None and remote_tag_item is None:
-                tag_name = local_tag_item.text().split(' - ')[1]
+                tag_name = local_tag_item.text().split(" - ")[1]
             elif local_tag_item is None and remote_tag_item is not None:
-                tag_name = remote_tag_item.text().split(' - ')[1]
+                tag_name = remote_tag_item.text().split(" - ")[1]
             else:
-                if local_tag_item.text().split(' - ')[1] == remote_tag_item.text().split(' - ')[1]:
-                    tag_name = local_tag_item.text().split(' - ')[1]
+                if local_tag_item.text().split(" - ")[1] == remote_tag_item.text().split(" - ")[1]:
+                    tag_name = local_tag_item.text().split(" - ")[1]
                 else:
-                    self.error_message("Cannot remove tags, please select the same tag from both local and remote.")
+                    self.error_message(
+                        "Cannot remove tags, please select the same tag from both local and remote."
+                    )
                     return
 
         success = remove_tag(dep_name, tag_name, self.tag_manager, self.dependency_registry)
@@ -294,13 +331,46 @@ class PackageManagerUI(QMainWindow):
         else:
             if tag_name in self.remote_tags[dep_name]:
                 self.remote_tags[dep_name].remove(tag_name)
-                self.remote_tag_list.takeItem(self.remote_tag_list.row(self.remote_tag_list.findItems(f" - {tag_name}", Qt.MatchFlag.MatchExactly)[0]))
-                self.table.setItem(self.row_for_dependencies[dep_name], 1, QTableWidgetItem(self.remote_tags[dep_name][0] if self.remote_tags[dep_name] else "None"))
+                self.remote_tag_list.takeItem(
+                    self.remote_tag_list.row(
+                        self.remote_tag_list.findItems(f" - {tag_name}", Qt.MatchFlag.MatchExactly)[
+                            0
+                        ]
+                    )
+                )
+                self.table.setItem(
+                    self.row_for_dependencies[dep_name],
+                    1,
+                    QTableWidgetItem(
+                        self.remote_tags[dep_name][0] if self.remote_tags[dep_name] else "None"
+                    ),
+                )
             if tag_name in self.local_tags[dep_name]:
                 self.local_tags[dep_name].remove(tag_name)
-                self.local_tag_list.takeItem(self.local_tag_list.row(self.local_tag_list.findItems(f" - {tag_name}", Qt.MatchFlag.MatchExactly)[0]))
-                self.table.setItem(self.row_for_dependencies[dep_name], 2, QTableWidgetItem(self.local_tags[dep_name][0] if self.local_tags[dep_name] else "None"))
-            self.table.setItem(self.row_for_dependencies[dep_name], 3, QTableWidgetItem(self.get_status(self.table.item(self.row_for_dependencies[dep_name], 1).text(), self.table.item(self.row_for_dependencies[dep_name], 2).text())))
+                self.local_tag_list.takeItem(
+                    self.local_tag_list.row(
+                        self.local_tag_list.findItems(f" - {tag_name}", Qt.MatchFlag.MatchExactly)[
+                            0
+                        ]
+                    )
+                )
+                self.table.setItem(
+                    self.row_for_dependencies[dep_name],
+                    2,
+                    QTableWidgetItem(
+                        self.local_tags[dep_name][0] if self.local_tags[dep_name] else "None"
+                    ),
+                )
+            self.table.setItem(
+                self.row_for_dependencies[dep_name],
+                3,
+                QTableWidgetItem(
+                    self.get_status(
+                        self.table.item(self.row_for_dependencies[dep_name], 1).text(),
+                        self.table.item(self.row_for_dependencies[dep_name], 2).text(),
+                    )
+                ),
+            )
 
         self.success_message(f"Tag '{tag_name}' removed from '{dep_name}'")
 
@@ -354,7 +424,7 @@ class PackageManagerUI(QMainWindow):
             return "Up to date"
 
     def get_local_tags(self, dep_name, repo_path):
-        output = run_command(['git', 'tag', '--sort=-v:refname'], repo_path)
+        output = run_command(["git", "tag", "--sort=-v:refname"], repo_path)
         if output is None:
             logger.error(f"[red]Error:[/red] Failed to get local tags for '{dep_name}'")
             return None
@@ -362,11 +432,13 @@ class PackageManagerUI(QMainWindow):
             logger.info(f"No local tags found for '{dep_name}'")
             return None
         else:
-            logger.info(f'[green]Local tags in {dep_name} fetched successfully[/green]')
-            return [tag for tag in output.strip().split('\n')]
+            logger.info(f"[green]Local tags in {dep_name} fetched successfully[/green]")
+            return [tag for tag in output.strip().split("\n")]
 
     def get_remote_tags(self, dep_name, repo_path):
-        output = run_command(['git', 'ls-remote', '--tags', '--sort=-v:refname', 'origin'], repo_path)
+        output = run_command(
+            ["git", "ls-remote", "--tags", "--sort=-v:refname", "origin"], repo_path
+        )
         if output is None:
             logger.error(f"[red]Error:[/red] Failed to get remote tags for '{dep_name}'")
             return None
@@ -374,8 +446,8 @@ class PackageManagerUI(QMainWindow):
             logger.info(f"No remote tags found for '{dep_name}'")
             return None
         else:
-            logger.info(f'[green]Remote tags in {dep_name} fetched successfully[/green]')
-            return [tag.split('refs/tags/')[1] for tag in output.strip().split('\n')]
+            logger.info(f"[green]Remote tags in {dep_name} fetched successfully[/green]")
+            return [tag.split("refs/tags/")[1] for tag in output.strip().split("\n")]
 
     def update(self, type: str):
         item = self.dep_list.currentItem()
@@ -396,7 +468,13 @@ class PackageManagerUI(QMainWindow):
                 return
             description = result
 
-        tag_name = update_helper(dep_name, self.tag_manager, self.dependency_registry.get(dep_name).repo_path, type, description)
+        tag_name = update_helper(
+            dep_name,
+            self.tag_manager,
+            self.dependency_registry.get(dep_name).repo_path,
+            type,
+            description,
+        )
         if tag_name is None:
             self.error_message(f"Failed to patch {dep_name}")
             return
@@ -404,10 +482,14 @@ class PackageManagerUI(QMainWindow):
             self.local_tags[dep_name].insert(0, tag_name)
             self.table.setItem(self.row_for_dependencies[dep_name], 2, QTableWidgetItem(tag_name))
             remote_tag = self.table.item(self.row_for_dependencies[dep_name], 1).text()
-            self.table.setItem(self.row_for_dependencies[dep_name], 3, QTableWidgetItem(self.get_status(remote_tag, tag_name)))
+            self.table.setItem(
+                self.row_for_dependencies[dep_name],
+                3,
+                QTableWidgetItem(self.get_status(remote_tag, tag_name)),
+            )
             if item:
                 self.local_tag_list.insertItem(0, f" - {tag_name}")
-        
+
         self.success_message(f"'{dep_name}' successfully updated")
 
     def success_message(self, message: str) -> None:

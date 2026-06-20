@@ -2,11 +2,25 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from typing import Optional
 
-from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsPathItem, QGraphicsTextItem
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QFont, QGuiApplication, QPen, QBrush, QColor, QPainter, QPainterPath, QTextOption
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QGuiApplication,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QTextOption,
+)
+from PySide6.QtWidgets import (
+    QGraphicsPathItem,
+    QGraphicsRectItem,
+    QGraphicsScene,
+    QGraphicsTextItem,
+    QGraphicsView,
+)
 
 from deepiri_pkg_version_manager.graph.dependency_graph import DependencyGraph
 
@@ -37,7 +51,7 @@ class DependencyGraphView(QGraphicsView):
     def __init__(
         self,
         dependency_graph: DependencyGraph,
-        root: Optional[str] = None,
+        root: str | None = None,
     ):
         super().__init__()
 
@@ -105,7 +119,7 @@ class DependencyGraphView(QGraphicsView):
             self._layout_label()
 
         def _layout_label(self):
-            w, h = self._bw, self._bh
+            w = self._bw
             pad = 8.0
             o = self._owner
             dep_font_pt = o.FONT_PT_DEPENDENT

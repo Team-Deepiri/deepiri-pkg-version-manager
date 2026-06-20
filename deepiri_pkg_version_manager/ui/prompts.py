@@ -1,6 +1,14 @@
+import logging
+
 from PySide6.QtWidgets import (
-    QDialog, QLineEdit, QTextEdit, QFormLayout, QDialogButtonBox,
-    QLabel, QVBoxLayout, QMessageBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QTextEdit,
+    QVBoxLayout,
 )
 
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
@@ -13,13 +21,12 @@ from deepiri_pkg_version_manager.utils import (
     run_command,
 )
 
-import logging
 logger = logging.getLogger(__name__)
 
 
-def prompt_add(parent, dependency_mgr: DependencyRegistry, dep: str = None) -> (
-    tuple[str, str, str] | tuple[str, str] | None
-):
+def prompt_add(
+    parent, dependency_mgr: DependencyRegistry, dep: str = None
+) -> tuple[str, str, str] | tuple[str, str] | None:
     dlg = QDialog(parent)
     dlg.setWindowTitle("Add tag")
     name_edit = QLineEdit()
@@ -60,9 +67,10 @@ def prompt_add(parent, dependency_mgr: DependencyRegistry, dep: str = None) -> (
                 "Please enter a tag name.",
             )
             return
-        if not check_valid_tag(name_edit.text().strip(), 
-                                dep if dep is not None else dep_edit.text().strip(),
-                                dependency_mgr.get(dep if dep is not None else dep_edit.text().strip()).repo_path
+        if not check_valid_tag(
+            name_edit.text().strip(),
+            dep if dep is not None else dep_edit.text().strip(),
+            dependency_mgr.get(dep if dep is not None else dep_edit.text().strip()).repo_path,
         ):
             QMessageBox.warning(
                 parent,
@@ -144,9 +152,11 @@ def prompt_push(parent, dependency_mgr: DependencyRegistry, dep: str = None):
                 "Please enter a valid tag name.",
             )
             return
-        if not push_sanitization(dep if dep is not None else dep_edit.text().strip(),
-                                name_edit.text().strip(),
-                                dependency_mgr.get(dep if dep is not None else dep_edit.text().strip()).repo_path):
+        if not push_sanitization(
+            dep if dep is not None else dep_edit.text().strip(),
+            name_edit.text().strip(),
+            dependency_mgr.get(dep if dep is not None else dep_edit.text().strip()).repo_path,
+        ):
             QMessageBox.warning(
                 parent,
                 "Push sanitization failed",
@@ -270,7 +280,9 @@ def prompt_update(parent, dependency_mgr: DependencyRegistry, type: str, dep: st
                 "Invalid dependency, ensure the dependency name is valid and the working tree is clean.",
             )
             return
-        if not check_tags_exist_locally(dependency_mgr.get(dep if dep is not None else dep_edit.text().strip()).repo_path):
+        if not check_tags_exist_locally(
+            dependency_mgr.get(dep if dep is not None else dep_edit.text().strip()).repo_path
+        ):
             QMessageBox.warning(
                 parent,
                 "Tag not found",
@@ -301,13 +313,13 @@ def prompt_update(parent, dependency_mgr: DependencyRegistry, type: str, dep: st
     description = desc_edit.toPlainText().strip()
 
     if dep is None:
-        return dependency,description
+        return dependency, description
     else:
         return description
 
 
 def check_tags_exist_locally(dep_path: str) -> bool:
-    tags = run_command(['git', 'tag', '--sort=-v:refname'], dep_path)
+    tags = run_command(["git", "tag", "--sort=-v:refname"], dep_path)
     if tags is None:
         logging.error(f"Failed to get tags for '{dep_path}'")
         return False

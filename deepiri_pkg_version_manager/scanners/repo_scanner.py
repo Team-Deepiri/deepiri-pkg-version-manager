@@ -412,7 +412,7 @@ def scan_pipfile(repo_path: Path) -> ScannedDependency | None:
 
 def scan_directory(
     root_path: Path,
-    package_types: list[str] = None,
+    package_types: list[str] | None = None,
     verbose: bool = False,
 ) -> list[ScannedDependency]:
     """Scan a directory for all package types."""
@@ -506,7 +506,7 @@ def scan_directory(
     return all_results
 
 
-def get_install_command(dep: ScannedDependency, package_manager: str = None) -> str:
+def get_install_command(dep: ScannedDependency, package_manager: str | None = None) -> str:
     """Generate install command for a dependency based on its type."""
     pkg_type = package_manager or dep.package_type
 
@@ -548,7 +548,7 @@ def get_install_command(dep: ScannedDependency, package_manager: str = None) -> 
     return f"# Unknown package type: {dep.package_type}"
 
 
-def get_install_all_command(dep: ScannedDependency, package_manager: str = None) -> str:
+def get_install_all_command(dep: ScannedDependency, package_manager: str | None = None) -> str:
     """Generate install all dependencies command for a package."""
     pkg_type = package_manager or dep.package_type
 

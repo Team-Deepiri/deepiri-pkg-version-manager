@@ -59,7 +59,8 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
 exclude = ["deepiri_pkg_version_manager/legacy/"]
+plugins = ["sqlalchemy.ext.mypy.plugin"]
 
 [[tool.mypy.overrides]]
-module = ["deepiri_pkg_version_manager.ui.*", "deepiri_pkg_version_manager.storage.*", "deepiri_pkg_version_manager.graph.*"]
+module = ["deepiri_pkg_version_manager.ui.*"]
 ignore_errors = true

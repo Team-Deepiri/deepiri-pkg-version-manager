@@ -29,12 +29,12 @@ class DependencyRegistry:
         name: str,
         repo_path: str,
         package_type: str = "npm",
-        version: str = None,
-        description: str = None,
-        git_url: str = None,
-        git_rev: str = None,
-        git_tag: str = None,
-        git_tags: list[str] = None,
+        version: str | None = None,
+        description: str | None = None,
+        git_url: str | None = None,
+        git_rev: str | None = None,
+        git_tag: str | None = None,
+        git_tags: list[str] | None = None,
         is_submodule: bool = False,
     ) -> Dependency:
         existing = self.session.query(DependencyDB).filter_by(name=name).first()
@@ -148,7 +148,7 @@ class DependencyRegistry:
 
         return DependencyDetail(**dep_dict)
 
-    def update_version(self, name: str, version: str, git_rev: str = None) -> bool:
+    def update_version(self, name: str, version: str, git_rev: str | None = None) -> bool:
         db = self.session.query(DependencyDB).filter_by(name=name).first()
         if db:
             db.version = version
@@ -173,7 +173,7 @@ class DependencyRegistry:
             return True
         return False
 
-    def add_edge(self, from_name: str, to_name: str, version_constraint: str = None):
+    def add_edge(self, from_name: str, to_name: str, version_constraint: str | None = None):
         from_db = self.session.query(DependencyDB).filter_by(name=from_name).first()
         to_db = self.session.query(DependencyDB).filter_by(name=to_name).first()
 

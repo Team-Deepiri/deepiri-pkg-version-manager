@@ -27,6 +27,7 @@ _configure_qt_runtime_env()
 
 from PySide6.QtWidgets import QApplication
 
+from deepiri_pkg_version_manager.deps.dependency_models import Dependency
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
 from deepiri_pkg_version_manager.scanners.org_scanner import scan_org
 from deepiri_pkg_version_manager.scanners.repo_scanner import (
@@ -118,6 +119,7 @@ def scan(
 
         scanned = scan_directory(path, package_types=types, verbose=verbose)
     else:
+        assert org is not None
         if not check_org_permissions(org):
             logging.error("[red]Error:[/red] You do not have permission to scan this organization")
             raise typer.Exit(1)
@@ -202,6 +204,7 @@ def clear_db(
         console.print(f"[green]Removed {len(removed)} dependencies under {path}[/green]")
         return
 
+    assert org is not None
     target_repo = repo.lower() if repo else None
     org_lc = org.lower()
 
@@ -233,6 +236,7 @@ def clear_db(
                 clone_dirs_to_remove.add(clone_dir)
 
     if target_repo is not None and not clone_dirs_to_remove:
+        assert repo is not None
         candidate = clone_root / repo
         if candidate.exists():
             clone_dirs_to_remove.add(candidate.resolve())
@@ -356,10 +360,11 @@ def install(
     registry = DependencyRegistry()
 
     if dependency:
-        deps = [registry.get(dependency)]
-        if not deps[0]:
+        _dep = registry.get(dependency)
+        if not _dep:
             rprint(f"[red]Error:[/red] Dependency '{dependency}' not found")
             raise typer.Exit(1)
+        deps: list[Dependency] = [_dep]
     else:
         deps = registry.get_all()
 
@@ -528,6 +533,9 @@ def tag_push(
         registry = DependencyRegistry()
 
         dep = registry.get(dependency)
+        if dep is None:
+            rprint(f"[red]Error:[/red] Dependency '{dependency}' not found")
+            raise typer.Exit(1)
         dep_path = dep.repo_path
         if not push_tag(dependency, dep_path, tag_mgr, registry, tag_name):
             console.log("[red]Error:[/red] Check logs for more information")
@@ -571,8 +579,8 @@ def tag_list(dependency: str | None = typer.Argument(None, help="Dependency name
         else:
             console.print(f"[yellow]No tags for '{dependency}'[/yellow]")
     else:
-        tags = tag_mgr.get_tags_with_counts()
-        if not tags:
+        tag_counts = tag_mgr.get_tags_with_counts()
+        if not tag_counts:
             rprint("[yellow]No tags found[/yellow]")
             return
 
@@ -581,7 +589,7 @@ def tag_list(dependency: str | None = typer.Argument(None, help="Dependency name
         table.add_column("Count", style="magenta")
         table.add_column("Description")
 
-        for tc in tags:
+        for tc in tag_counts:
             table.add_row(
                 tc.tag.name,
                 str(tc.dependency_count),
@@ -604,7 +612,9 @@ def tag_patch(
         if not dependency_tree_check(dependency, registry):
             rprint("[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
-        dep_path = registry.get(dependency).repo_path
+        _dep = registry.get(dependency)
+        assert _dep is not None
+        dep_path = _dep.repo_path
         new_tag = update_helper(dependency, tag_mgr, dep_path, "patch", description, color)
         if new_tag is None:
             rprint("[red]Error:[/red] Check logs for more information")
@@ -626,7 +636,9 @@ def tag_minor(
         if not dependency_tree_check(dependency, registry):
             rprint("[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
-        dep_path = registry.get(dependency).repo_path
+        _dep = registry.get(dependency)
+        assert _dep is not None
+        dep_path = _dep.repo_path
         new_tag = update_helper(dependency, tag_mgr, dep_path, "minor", description, color)
         if new_tag is None:
             rprint("[red]Error:[/red] Check logs for more information")
@@ -648,7 +660,9 @@ def tag_major(
         if not dependency_tree_check(dependency, registry):
             rprint("[red]Error:[/red] Check logs for more information")
             raise typer.Exit(1)
-        dep_path = registry.get(dependency).repo_path
+        _dep = registry.get(dependency)
+        assert _dep is not None
+        dep_path = _dep.repo_path
         new_tag = update_helper(dependency, tag_mgr, dep_path, "major", description, color)
         if new_tag is None:
             rprint("[red]Error:[/red] Check logs for more information")

@@ -22,8 +22,8 @@ class TagManager:
     def create_tag(
         self,
         name: str,
-        description: str = None,
-        color: str = None,
+        description: str | None = None,
+        color: str | None = None,
     ) -> Tag:
         existing = self.session.query(TagDB).filter_by(name=name).first()
         if existing:

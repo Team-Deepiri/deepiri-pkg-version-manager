@@ -84,7 +84,7 @@ def is_synced_with_main(dep_path: str) -> bool:
     main = run_command(["git", "rev-parse", "main"], dep_path)
     origin_main = run_command(["git", "rev-parse", "origin/main"], dep_path)
 
-    if None in (head, main, origin_main):
+    if head is None or main is None or origin_main is None:
         logging.error("[red]Error:[/red] Failed to resolve commit hashes")
         return False
 
@@ -386,6 +386,9 @@ def create_tag(
     color: str | None = None,
 ):
     dep = registry.get(dependency)
+    if dep is None:
+        logging.error(f"[red]Error:[/red] Dependency '{dependency}' not found")
+        raise typer.Exit(1)
     dep_path = dep.repo_path
 
     if tag_name is None:
@@ -412,12 +415,12 @@ def create_tag(
     else:
         logging.error("[red]Error:[/red] Failed to add tag")
 
-    commit_sha = run_command(["git", "rev-parse", "HEAD"], dep_path).strip()
-    if commit_sha is None:
+    _sha = run_command(["git", "rev-parse", "HEAD"], dep_path)
+    if _sha is None:
         logging.error("[red]Error:[/red] Failed to get commit SHA")
         return False
-    else:
-        logging.info(f"[green]Commit SHA is '{commit_sha}'[/green]")
+    commit_sha = _sha.strip()
+    logging.info(f"[green]Commit SHA is '{commit_sha}'[/green]")
 
     output = run_command(["git", "tag", "-a", tag_name, commit_sha, "-m", description], dep_path)
     if output is None:
@@ -447,9 +450,8 @@ def push_tag(
         if local_tags is None or local_tags.strip() == "":
             logging.error(f"[red]Error:[/red] There are no tags to push in '{dependency}'")
             return False
-        elif local_tags.strip() != "":
-            tag_name = local_tags.strip().split("\n")[0]
-            logging.info(f"[green]Pushing latest tag '{tag_name}' in '{dependency}'[/green]")
+        tag_name = local_tags.strip().split("\n")[0]
+        logging.info(f"[green]Pushing latest tag '{tag_name}' in '{dependency}'[/green]")
 
     if not is_valid_push_state(dep_path, tag_name):
         logging.error("[red]Error:[/red] Push state is not valid")
@@ -598,6 +600,9 @@ def remove_tag(
     dependency: str, tag_name: str, tag_mgr: TagManager, registry: DependencyRegistry
 ) -> bool:
     dep = registry.get(dependency)
+    if dep is None:
+        logging.error(f"[red]Error:[/red] Dependency '{dependency}' not found")
+        return False
     dep_path = dep.repo_path
     pt1 = pt2 = True
 
@@ -806,7 +811,11 @@ def dep_clone_dir(dep, clone_root: Path) -> Path | None:
 def branch_cleanup(dependency: str, tag_name: str) -> bool:
     branch = f"version/{tag_name}"
     registry = DependencyRegistry()
-    dep_path = registry.get(dependency).repo_path
+    dep = registry.get(dependency)
+    if dep is None:
+        logging.error(f"[red]Error:[/red] Dependency '{dependency}' not found")
+        return False
+    dep_path = dep.repo_path
     if dep_path is None:
         logging.error(f"[red]Error:[/red] Dependency '{dependency}' not found")
         return False

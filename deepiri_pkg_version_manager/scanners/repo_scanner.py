@@ -24,6 +24,7 @@ class ScannedDependency:
     version: str | None = None
     description: str | None = None
     dependencies: list[str] = field(default_factory=list)
+    dependency_constraints: dict[str, str | None] = field(default_factory=dict)
     git_url: str | None = None
     git_rev: str | None = None
     git_tag: str | None = None
@@ -186,9 +187,21 @@ def scan_package_json(repo_path: Path) -> ScannedDependency | None:
         description = data.get("description")
 
         deps = data.get("dependencies", {})
-        internal_deps = [
-            _dependency_registry_key(dep) for dep in deps.keys() if is_internal_dep(dep)
-        ]
+        internal_deps: list[str] = []
+        constraints: dict[str, str | None] = {}
+
+        for dep_name, dep_version in deps.items():
+            if not is_internal_dep(dep_name):
+                continue
+            key = _dependency_registry_key(dep_name)
+            internal_deps.append(key)
+            # file:/git pins are not comparable package versions
+            if isinstance(dep_version, str) and (
+                dep_version.startswith("file:") or dep_version.startswith("git")
+            ):
+                constraints[key] = None
+            else:
+                constraints[key] = str(dep_version) if dep_version is not None else None
 
         git_url, git_rev, git_tag, git_tags = extract_git_info(repo_path)
 
@@ -198,19 +211,13 @@ def scan_package_json(repo_path: Path) -> ScannedDependency | None:
             package_type="npm",
             version=version,
             description=description,
-            dependencies=internal_deps,
+            dependencies=sorted(dict.fromkeys(internal_deps)),
+            dependency_constraints=constraints,
             git_url=git_url,
             git_rev=git_rev,
             git_tag=git_tag,
             git_tags=git_tags,
         )
-
-        # Check for file: dependencies (local)
-        for dep_name, dep_version in deps.items():
-            if dep_version.startswith("file:") and is_internal_dep(dep_name):
-                internal_deps.append(_dependency_registry_key(dep_name))
-
-        result.dependencies = sorted(dict.fromkeys(internal_deps))
 
         return result
 
@@ -239,24 +246,39 @@ def scan_pyproject_toml(repo_path: Path) -> ScannedDependency | None:
 
         is_poetry = bool(poetry.get("dependencies"))
 
-        internal_deps = []
+        internal_deps: list[str] = []
+        constraints: dict[str, str | None] = {}
 
         if is_poetry:
             deps = poetry.get("dependencies", {})
-            for dep_name, _dep_value in deps.items():
-                if is_internal_dep(dep_name):
-                    internal_deps.append(_dependency_registry_key(dep_name))
+            for dep_name, dep_value in deps.items():
+                if not is_internal_dep(dep_name):
+                    continue
+                key = _dependency_registry_key(dep_name)
+                internal_deps.append(key)
+                if isinstance(dep_value, dict) and (
+                    "path" in dep_value or "git" in dep_value
+                ):
+                    constraints[key] = None
+                elif isinstance(dep_value, str):
+                    constraints[key] = dep_value
+                else:
+                    constraints[key] = None
         else:
             deps = project.get("dependencies", [])
             for dep in deps:
                 if isinstance(dep, str):
                     dep_name = dep.split()[0]
                     if is_internal_dep(dep_name):
-                        internal_deps.append(_dependency_registry_key(dep_name))
+                        key = _dependency_registry_key(dep_name)
+                        internal_deps.append(key)
+                        constraints[key] = None
                 elif isinstance(dep, dict):
                     dep_name = dep.get("dep", "")
                     if is_internal_dep(dep_name):
-                        internal_deps.append(_dependency_registry_key(dep_name))
+                        key = _dependency_registry_key(dep_name)
+                        internal_deps.append(key)
+                        constraints[key] = None
 
         git_url, git_rev, git_tag, git_tags = extract_git_info(repo_path)
 
@@ -266,14 +288,13 @@ def scan_pyproject_toml(repo_path: Path) -> ScannedDependency | None:
             package_type="poetry" if is_poetry else "pip",
             version=str(version) if version else None,
             description=description,
-            dependencies=internal_deps,
+            dependencies=sorted(dict.fromkeys(internal_deps)),
+            dependency_constraints=constraints,
             git_url=git_url,
             git_rev=git_rev,
             git_tag=git_tag,
             git_tags=git_tags,
         )
-
-        result.dependencies = sorted(dict.fromkeys(internal_deps))
 
         return result
 
@@ -350,6 +371,10 @@ def scan_requirements_txt(repo_path: Path) -> ScannedDependency | None:
                     if vmatch:
                         version = vmatch.group(1)
 
+        # Avoid registering nested requirements folders as packages (train, pgadmin, …)
+        if not internal_deps and not is_internal_dep(repo_path.name):
+            return None
+
         git_url, git_rev, git_tag, git_tags = extract_git_info(repo_path)
 
         result = ScannedDependency(
@@ -409,6 +434,18 @@ def scan_pipfile(repo_path: Path) -> ScannedDependency | None:
     except Exception as e:
         console.print(f"[yellow]Warning:[/yellow] Failed to parse {pipfile}: {e}")
         return None
+
+
+def _is_registrable_package(result: ScannedDependency, path: Path) -> bool:
+    """Filter out nested stubs (e.g. emotion extensions named github/notion)."""
+    if is_internal_dep(result.name):
+        return True
+    if result.dependencies:
+        return True
+    # Extension / plugin stubs often use short non-Deepiri package names
+    if "extensions" in path.parts:
+        return False
+    return True
 
 
 def scan_directory(
@@ -474,6 +511,11 @@ def scan_directory(
             if not result and "pip" in package_types:
                 result = scan_pipfile(subdir) or scan_requirements_txt(subdir)
 
+            if result and not _is_registrable_package(result, subdir):
+                if verbose:
+                    console.print(f"  [dim]skipped[/dim] {result.name} ({subdir})")
+                continue
+
             if result:
                 if result.name not in name_to_result:
                     name_to_result[result.name] = result
@@ -488,6 +530,7 @@ def scan_directory(
                     existing.dependencies = sorted(
                         dict.fromkeys([*existing.dependencies, *result.dependencies])
                     )
+                    existing.dependency_constraints.update(result.dependency_constraints)
                     if not existing.version and result.version:
                         existing.version = result.version
                     if not existing.git_rev and result.git_rev:
@@ -518,42 +561,62 @@ class InstallablePackage(Protocol):
     is_submodule: bool
 
 
+def normalize_git_dependency_url(git_url: str) -> str:
+    """Normalize a git remote URL for poetry/pip ``git+`` install specs."""
+    url = git_url.strip()
+    if url.startswith("git+"):
+        url = url[4:]
+    if url.startswith("git@"):
+        # git@github.com:Org/repo.git -> ssh://git@github.com/Org/repo.git
+        host_path = url[4:]
+        if ":" in host_path:
+            host, path = host_path.split(":", 1)
+            return f"ssh://git@{host}/{path}"
+        return f"ssh://git@{host_path}"
+    return url
+
+
+def _install_ref(dep: InstallablePackage) -> str:
+    """Prefer a clean semver tag; otherwise use the short git rev / main."""
+    from deepiri_pkg_version_manager.utils import is_clean_semver_tag
+
+    if is_clean_semver_tag(dep.git_tag):
+        return dep.git_tag  # type: ignore[return-value]
+    return dep.git_rev or "main"
+
+
 def get_install_command(dep: InstallablePackage, package_manager: str | None = None) -> str:
     """Generate install command for a dependency based on its type."""
     pkg_type = package_manager or dep.package_type
 
     if pkg_type == "npm" or dep.package_type == "npm":
-        if dep.git_tag:
-            return f"npm install {dep.name}@{dep.git_tag}"
-        elif dep.git_url:
-            return f"npm install {dep.name}@{dep.git_url}#{dep.git_rev or 'main'}"
-        elif dep.version:
+        if dep.git_url:
+            return f"npm install {dep.git_url}#{_install_ref(dep)}"
+        if dep.version:
             return f"npm install {dep.name}@{dep.version}"
         return f"npm install {dep.name}"
 
     elif pkg_type in ("poetry", "pip") or dep.package_type in ("poetry", "pip"):
-        if dep.git_tag:
-            return f"poetry add git@{dep.git_url}#{dep.git_tag}"
-        elif dep.git_url:
-            rev = dep.git_rev or "main"
-            return f"poetry add git@{dep.git_url}@{rev}"
-        elif dep.version:
+        if dep.git_url:
+            git_url = normalize_git_dependency_url(dep.git_url)
+            return f"poetry add git+{git_url}@{_install_ref(dep)}"
+        if dep.version:
             return f"poetry add {dep.name}@{dep.version}"
         return f"poetry add {dep.name}"
 
     elif pkg_type == "pipenv" or dep.package_type == "pipenv":
         if dep.git_url:
-            rev = dep.git_rev or "main"
-            return f"pipenv install git+{dep.git_url}@{rev}#egg={dep.name}"
-        elif dep.version:
+            git_url = normalize_git_dependency_url(dep.git_url)
+            return f"pipenv install git+{git_url}@{_install_ref(dep)}#egg={dep.name}"
+        if dep.version:
             return f"pipenv install {dep.name}=={dep.version}"
         return f"pipenv install {dep.name}"
 
     elif pkg_type == "pip":
         if dep.git_url:
-            rev = dep.git_rev or "main"
-            return f"pip install git+{dep.git_url}@{rev}#egg={dep.name}"
-        elif dep.version:
+            git_url = normalize_git_dependency_url(dep.git_url)
+            return f"pip install git+{git_url}@{_install_ref(dep)}#egg={dep.name}"
+        if dep.version:
             return f"pip install {dep.name}=={dep.version}"
         return f"pip install {dep.name}"
 

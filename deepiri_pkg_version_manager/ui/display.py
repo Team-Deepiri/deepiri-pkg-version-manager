@@ -1,6 +1,5 @@
 import logging
 
-from packaging.version import Version
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -30,6 +29,7 @@ from deepiri_pkg_version_manager.ui.prompts import (
 from deepiri_pkg_version_manager.utils import (
     create_tag,
     dependency_tree_check,
+    parse_tag_version,
     push_tag,
     remove_tag,
     run_command,
@@ -205,6 +205,24 @@ class PackageManagerUI(QMainWindow):
         dep_name = current.text()
         for tag in self.local_tags.get(dep_name, []):
             self.local_tag_list.addItem(f" - {tag}")
+
+        if not self.remote_tags.get(dep_name):
+            dep = self.dependency_registry.get(dep_name)
+            if dep:
+                remote_tags = self.get_remote_tags(dep_name, dep.repo_path)
+                if remote_tags:
+                    self.remote_tags[dep_name] = [
+                        tag for tag in remote_tags if "^{}" not in tag
+                    ]
+                    if self.remote_tags[dep_name]:
+                        remote_tag = self.remote_tags[dep_name][0]
+                        row = self.row_for_dependencies[dep_name]
+                        local_tag = self.table.item(row, 2).text()
+                        self.table.setItem(row, 1, QTableWidgetItem(remote_tag))
+                        self.table.setItem(
+                            row, 3, QTableWidgetItem(self.get_status(remote_tag, local_tag))
+                        )
+
         for tag in self.remote_tags.get(dep_name, []):
             self.remote_tag_list.addItem(f" - {tag}")
 
@@ -384,25 +402,25 @@ class PackageManagerUI(QMainWindow):
         self.update("major")
 
     def load_dependency_data(self):
+        """Populate the table from local git data.
+
+        Remote ``ls-remote`` is deferred until a dependency is selected so UI
+        launch does not block on network calls for every package.
+        """
         self.table.setRowCount(len(self.dependencies))
         for index, dep in enumerate(self.dependencies):
-            remote_tags = self.get_remote_tags(dep.name, dep.repo_path)
-            if remote_tags is None:
-                remote_tag = "None"
-                self.remote_tags[dep.name] = []
-            else:
-                remote_tags = [tag for tag in remote_tags if "^{}" not in tag]
-                remote_tag = remote_tags[0]
-                self.remote_tags[dep.name] = remote_tags
-
             local_tags = self.get_local_tags(dep.name, dep.repo_path)
             if local_tags is None:
                 local_tag = "None"
                 self.local_tags[dep.name] = []
             else:
                 local_tags = [tag for tag in local_tags if "^{}" not in tag]
-                local_tag = local_tags[0]
+                local_tag = local_tags[0] if local_tags else "None"
                 self.local_tags[dep.name] = local_tags
+
+            # Prefer a clean scanned tag; fall back to local tip. Remote fetch is lazy.
+            remote_tag = dep.git_tag if dep.git_tag else "None"
+            self.remote_tags[dep.name] = []
 
             self.table.setItem(index, 0, QTableWidgetItem(dep.name))
             self.table.setItem(index, 1, QTableWidgetItem(remote_tag))
@@ -416,12 +434,19 @@ class PackageManagerUI(QMainWindow):
             return "Ahead"
         elif remote_tag != "None" and local_tag == "None":
             return "Behind"
-        elif Version(remote_tag) > Version(local_tag):
+
+        remote_ver = parse_tag_version(remote_tag)
+        local_ver = parse_tag_version(local_tag)
+        if remote_ver is None or local_ver is None:
+            if remote_tag == local_tag:
+                return "Up to date"
+            return "Unknown"
+
+        if remote_ver > local_ver:
             return "Behind"
-        elif Version(remote_tag) < Version(local_tag):
+        if remote_ver < local_ver:
             return "Ahead"
-        else:
-            return "Up to date"
+        return "Up to date"
 
     def get_local_tags(self, dep_name, repo_path):
         output = run_command(["git", "tag", "--sort=-v:refname"], repo_path)

@@ -349,12 +349,13 @@ def push_sanitization(dependency: str, tag_name: str, dep_path: str):
             logging.info(f"[green]No tags exist with ref/tags/ in '{dependency}'[/green]")
             return True
 
-        comparable = [(t, parse_tag_version(t)) for t in tags]
-        comparable = [(t, v) for t, v in comparable if v is not None]
+        comparable: list[tuple[str, Version]] = []
+        for tag in tags:
+            parsed = parse_tag_version(tag)
+            if parsed is not None:
+                comparable.append((tag, parsed))
         if not comparable:
-            logging.info(
-                f"[green]No comparable semver tags remotely in '{dependency}'[/green]"
-            )
+            logging.info(f"[green]No comparable semver tags remotely in '{dependency}'[/green]")
             return True
 
         latest_tag, latest_ver = max(comparable, key=lambda item: item[1])

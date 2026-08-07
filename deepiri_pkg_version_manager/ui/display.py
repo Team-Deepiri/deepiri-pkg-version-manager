@@ -211,9 +211,7 @@ class PackageManagerUI(QMainWindow):
             if dep:
                 remote_tags = self.get_remote_tags(dep_name, dep.repo_path)
                 if remote_tags:
-                    self.remote_tags[dep_name] = [
-                        tag for tag in remote_tags if "^{}" not in tag
-                    ]
+                    self.remote_tags[dep_name] = [tag for tag in remote_tags if "^{}" not in tag]
                     if self.remote_tags[dep_name]:
                         remote_tag = self.remote_tags[dep_name][0]
                         row = self.row_for_dependencies[dep_name]

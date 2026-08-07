@@ -245,12 +245,7 @@ class DependencyRegistry:
 
         return outdated
 
-    def get_edges(self) -> list[DependencyEdgeDB]:
-        return self.session.query(DependencyEdgeDB).all()
-
-    def update_edge_constraint(
-        self, from_name: str, to_name: str, version_constraint: str
-    ) -> bool:
+    def update_edge_constraint(self, from_name: str, to_name: str, version_constraint: str) -> bool:
         from_db = self.session.query(DependencyDB).filter_by(name=from_name).first()
         to_db = self.session.query(DependencyDB).filter_by(name=to_name).first()
         if not from_db or not to_db:

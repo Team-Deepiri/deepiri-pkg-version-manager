@@ -256,9 +256,7 @@ def scan_pyproject_toml(repo_path: Path) -> ScannedDependency | None:
                     continue
                 key = _dependency_registry_key(dep_name)
                 internal_deps.append(key)
-                if isinstance(dep_value, dict) and (
-                    "path" in dep_value or "git" in dep_value
-                ):
+                if isinstance(dep_value, dict) and ("path" in dep_value or "git" in dep_value):
                     constraints[key] = None
                 elif isinstance(dep_value, str):
                     constraints[key] = dep_value

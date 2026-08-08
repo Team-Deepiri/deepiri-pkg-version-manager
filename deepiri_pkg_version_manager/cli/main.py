@@ -150,7 +150,8 @@ def scan(
 
         for dep in scanned:
             for dep_name in dep.dependencies:
-                registry.add_edge(dep.name, dep_name)
+                constraint = dep.dependency_constraints.get(dep_name)
+                registry.add_edge(dep.name, dep_name, version_constraint=constraint)
 
         console.print("[green]Saved to database[/green]")
 
@@ -392,7 +393,7 @@ def install(
 
 @app.command()
 def outdated():
-    """Check for outdated dependencies."""
+    """Check for outdated dependency pins vs actual dependency versions."""
     registry = DependencyRegistry()
 
     outdated_pairs = registry.get_outdated()
@@ -403,11 +404,17 @@ def outdated():
 
     table = Table(title="Outdated Dependencies")
     table.add_column("Package", style="cyan")
-    table.add_column("Current", style="yellow")
-    table.add_column("Wanted", style="green")
+    table.add_column("Dependency", style="magenta")
+    table.add_column("Pinned", style="yellow")
+    table.add_column("Actual", style="green")
 
-    for current, wanted in outdated_pairs:
-        table.add_row(current.name, current.version or "-", wanted.version or "-")
+    for dependent, dependency, pinned in outdated_pairs:
+        table.add_row(
+            dependent.name,
+            dependency.name,
+            pinned or "-",
+            dependency.version or "-",
+        )
 
     console.print(table)
 
@@ -416,39 +423,39 @@ def outdated():
 def sync(
     dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Show changes without applying"),
 ):
-    """Sync versions across the dependency graph."""
+    """Sync declared dependency pins to match actual dependency versions."""
     registry = DependencyRegistry()
-    graph = registry.build_graph()
 
-    changes = []
-
-    for dep in registry.get_all():
-        dependents = graph.get_dependents(dep.name)
-        for dependent_name in dependents:
-            dependent = registry.get(dependent_name)
-            if dependent and dep.version:
-                if dependent.version != dep.version:
-                    changes.append((dependent_name, dependent.version, dep.version, dep.name))
+    outdated_pairs = registry.get_outdated()
+    changes = [
+        (dependent.name, dependency.name, pinned, dependency.version)
+        for dependent, dependency, pinned in outdated_pairs
+        if dependency.version
+    ]
 
     if not changes:
         console.print("[green]All versions are in sync![/green]")
         return
 
-    table = Table(title="Version Changes Needed")
+    table = Table(title="Version Pin Changes Needed")
     table.add_column("Package", style="cyan")
-    table.add_column("Current", style="yellow")
-    table.add_column("New", style="green")
-    table.add_column("From", style="magenta")
+    table.add_column("Dependency", style="magenta")
+    table.add_column("Current Pin", style="yellow")
+    table.add_column("New Pin", style="green")
 
-    for pkg, current, new, from_dep in changes:
-        table.add_row(pkg, current or "-", new or "-", from_dep)
+    for pkg, dep_name, current, new in changes:
+        table.add_row(pkg, dep_name, current or "-", new or "-")
 
     console.print(table)
 
     if not dry_run:
-        for pkg, current, new, from_dep in changes:
-            registry.update_version(pkg, new)
-        console.print("[green]Versions synced![/green]")
+        for pkg, dep_name, _current, new in changes:
+            if new:
+                registry.update_edge_constraint(pkg, dep_name, new)
+        console.print(
+            "[green]Dependency pins updated in the local database "
+            "(source manifests are not modified).[/green]"
+        )
 
 
 @app.command()

@@ -1,4 +1,5 @@
 import json
+import re
 from uuid import UUID
 
 from rich.console import Console
@@ -206,19 +207,62 @@ class DependencyRegistry:
 
         return graph
 
-    def get_outdated(self) -> list[tuple[Dependency, Dependency]]:
-        """Get pairs of (current, wanted) outdated dependencies."""
-        outdated = []
-        graph = self.build_graph()
+    @staticmethod
+    def _normalize_constraint(constraint: str | None) -> str | None:
+        """Strip common range operators so a pin can be compared to a package version."""
+        if not constraint:
+            return None
+        text = constraint.strip()
+        if text.startswith(("file:", "git+", "git@", "http://", "https://", "ssh://")):
+            return None
+        text = re.sub(r"^[\^~>=<!]+\s*", "", text)
+        text = text.split(",")[0].strip()
+        text = text.split(";")[0].strip()
+        return text or None
 
-        for dep in self.get_all():
-            wanted = graph.get_dependencies(dep.name)
-            for want_name in wanted:
-                wanted_dep = self.get(want_name)
-                if wanted_dep and dep.version != wanted_dep.version:
-                    outdated.append((dep, wanted_dep))
+    def get_outdated(self) -> list[tuple[Dependency, Dependency, str | None]]:
+        """Return (dependent, dependency, pinned_constraint) when a pin mismatches.
+
+        Compares the declared edge constraint to the dependency's actual package
+        version. Package-own versions are not compared to each other.
+        """
+        outdated: list[tuple[Dependency, Dependency, str | None]] = []
+        edges = self.session.query(DependencyEdgeDB).all()
+        id_to_dep = {str(d.id): d for d in self.get_all()}
+
+        for edge in edges:
+            dependent = id_to_dep.get(edge.from_dependency_id)
+            dependency = id_to_dep.get(edge.to_dependency_id)
+            if not dependent or not dependency or not dependency.version:
+                continue
+
+            pinned = self._normalize_constraint(edge.version_constraint)
+            if not pinned:
+                continue
+
+            if pinned.lstrip("v") != dependency.version.lstrip("v"):
+                outdated.append((dependent, dependency, edge.version_constraint))
 
         return outdated
+
+    def update_edge_constraint(self, from_name: str, to_name: str, version_constraint: str) -> bool:
+        from_db = self.session.query(DependencyDB).filter_by(name=from_name).first()
+        to_db = self.session.query(DependencyDB).filter_by(name=to_name).first()
+        if not from_db or not to_db:
+            return False
+        edge = (
+            self.session.query(DependencyEdgeDB)
+            .filter_by(
+                from_dependency_id=from_db.id,
+                to_dependency_id=to_db.id,
+            )
+            .first()
+        )
+        if not edge:
+            return False
+        edge.version_constraint = version_constraint
+        self.session.commit()
+        return True
 
     def _db_to_model(self, db: DependencyDB) -> Dependency:
         try:

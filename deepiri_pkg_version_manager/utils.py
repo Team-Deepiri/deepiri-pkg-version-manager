@@ -1,14 +1,37 @@
 import logging
 import os
+import re
 import subprocess
 from pathlib import Path
 
 import typer
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 from rich import print as rprint
 
 from deepiri_pkg_version_manager.deps.dependency_registry import DependencyRegistry
 from deepiri_pkg_version_manager.tags.tag_manager import TagManager
+
+_GIT_DESCRIBE_RE = re.compile(r"-\d+-g[0-9a-f]+$", re.IGNORECASE)
+
+
+def parse_tag_version(tag: str | None) -> Version | None:
+    """Parse a git tag / version string into a Version, or None if not comparable."""
+    if not tag or tag in {"None", "-"}:
+        return None
+    text = tag.strip()
+    if _GIT_DESCRIBE_RE.search(text):
+        return None
+    if text.startswith("v") and len(text) > 1 and text[1].isdigit():
+        text = text[1:]
+    try:
+        return Version(text)
+    except InvalidVersion:
+        return None
+
+
+def is_clean_semver_tag(tag: str | None) -> bool:
+    """True when tag is a clean semver (optional leading v), not a describe string."""
+    return parse_tag_version(tag) is not None
 
 
 def run_command(
@@ -203,7 +226,9 @@ def check_valid_tag(tag_name: str, dependency: str, dep_path: str):
 
     if tags:
         latest_tag = tags.strip().split("\n")[0]
-        if Version(tag_name) <= Version(latest_tag):
+        new_ver = parse_tag_version(tag_name)
+        latest_ver = parse_tag_version(latest_tag)
+        if new_ver is not None and latest_ver is not None and new_ver <= latest_ver:
             logging.error(
                 f"[red]Error:[/red] Tag '{tag_name}' is not greater than latest tag '{latest_tag}' in '{dependency}'"
             )
@@ -324,8 +349,18 @@ def push_sanitization(dependency: str, tag_name: str, dep_path: str):
             logging.info(f"[green]No tags exist with ref/tags/ in '{dependency}'[/green]")
             return True
 
-        latest_tag = max(tags, key=Version)
-        if Version(tag_name) <= Version(latest_tag):
+        comparable: list[tuple[str, Version]] = []
+        for tag in tags:
+            parsed = parse_tag_version(tag)
+            if parsed is not None:
+                comparable.append((tag, parsed))
+        if not comparable:
+            logging.info(f"[green]No comparable semver tags remotely in '{dependency}'[/green]")
+            return True
+
+        latest_tag, latest_ver = max(comparable, key=lambda item: item[1])
+        new_ver = parse_tag_version(tag_name)
+        if new_ver is not None and new_ver <= latest_ver:
             logging.error(
                 f"[red]Error:[/red] Tag '{tag_name}' is not greater than latest tag '{latest_tag}' in '{dependency}'"
             )

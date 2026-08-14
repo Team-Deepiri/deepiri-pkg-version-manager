@@ -20,7 +20,8 @@ def _configure_qt_runtime_env() -> None:
     if not os.environ.get("DISPLAY"):
         os.environ["DISPLAY"] = ":0"
 
-    os.environ["QT_QPA_PLATFORM"] = "xcb"
+    if not os.environ.get("QT_QPA_PLATFORM"):
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 
 _configure_qt_runtime_env()

@@ -188,10 +188,11 @@ class DependencyRegistry:
             self.session.commit()
 
     def clear_all(self):
-        """Clear all dependencies and edges."""
+        """Clear all dependencies, edges, and tags."""
         self.session.query(DependencyEdgeDB).delete()
         self.session.query(DependencyTagDB).delete()
         self.session.query(DependencyDB).delete()
+        self.session.query(TagDB).delete()
         self.session.commit()
 
     def build_graph(self) -> DependencyGraph:

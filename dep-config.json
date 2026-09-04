@@ -2,6 +2,11 @@
   "deepiri-core-api": {
     "dependents": [
       {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "deepiri-core-api"
+      },
+      {
         "repo": "Team-Deepiri/deepiri-platform",
         "type": "submodule",
         "path": "deepiri-core-api"
@@ -14,6 +19,11 @@
         "repo": "Team-Deepiri/deepiri-platform",
         "type": "submodule",
         "path": "platform-services/backend/deepiri-api-gateway"
+      },
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "platform-services/backend/deepiri-api-gateway"
       }
     ]
   },
@@ -21,6 +31,11 @@
     "dependents": [
       {
         "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "deepiri-web-frontend"
+      },
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
         "type": "submodule",
         "path": "deepiri-web-frontend"
       }
@@ -32,6 +47,11 @@
         "repo": "Team-Deepiri/deepiri-platform",
         "type": "submodule",
         "path": "platform-services/backend/deepiri-external-bridge-service"
+      },
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "platform-services/backend/deepiri-external-bridge-service"
       }
     ]
   },
@@ -41,11 +61,21 @@
         "repo": "Team-Deepiri/deepiri-platform",
         "type": "submodule",
         "path": "platform-services/backend/deepiri-auth-service"
+      },
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "platform-services/backend/deepiri-auth-service"
       }
     ]
   },
   "deepiri-language-intelligence-service": {
     "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "platform-services/backend/deepiri-language-intelligence-service"
+      },
       {
         "repo": "Team-Deepiri/deepiri-platform",
         "type": "submodule",
@@ -56,6 +86,11 @@
   "diri-persola": {
     "dependents": [
       {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "diri-persola"
+      },
+      {
         "repo": "Team-Deepiri/deepiri-platform",
         "type": "submodule",
         "path": "diri-persola"
@@ -64,6 +99,11 @@
   },
   "deepiri-prismpipe": {
     "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "platform-services/shared/deepiri-prismpipe"
+      },
       {
         "repo": "Team-Deepiri/deepiri-platform",
         "type": "submodule",
@@ -75,6 +115,11 @@
     "dependents": [
       {
         "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "platform-services/shared/deepiri-shared-utils"
+      },
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
         "type": "submodule",
         "path": "platform-services/shared/deepiri-shared-utils"
       }

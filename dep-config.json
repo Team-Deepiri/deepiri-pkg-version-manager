@@ -1,53 +1,188 @@
 {
-  "deepiri-core-api": {
+  "diri-agent-testing-utils": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "submodule",
+        "path": "diri-agent-testing-utils"
+      },
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "python",
+        "package": "diri-agent-testing-utils"
+      }
+    ]
+  },
+  "deepiri-dataset-processor": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "submodule",
+        "path": "deepiri-dataset-processor"
+      },
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "python",
+        "package": "deepiri-dataset-processor"
+      },
+      {
+        "repo": "Team-Deepiri/deepiri-training-orchestrator",
+        "type": "python",
+        "package": "deepiri-dataset-processor"
+      },
+      {
+        "repo": "Team-Deepiri/diri-helox",
+        "type": "python",
+        "package": "deepiri-dataset-processor"
+      }
+    ]
+  },
+  "deepiri-logger": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "submodule",
+        "path": "deps/deepiri-logger"
+      },
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "deepiri-logger"
+      },
+      {
+        "repo": "Team-Deepiri/diri-helox",
+        "type": "submodule",
+        "path": "deps/deepiri-logger"
+      }
+    ]
+  },
+  "diri-agent-guardrails": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "python",
+        "package": "diri-agent-guardrails"
+      }
+    ]
+  },
+  "deepiri-modelkit": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "python",
+        "package": "deepiri-modelkit"
+      },
+      {
+        "repo": "Team-Deepiri/deepiri-training-orchestrator",
+        "type": "python",
+        "package": "deepiri-modelkit"
+      },
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "deepiri-modelkit"
+      },
+      {
+        "repo": "Team-Deepiri/diri-helox",
+        "type": "python",
+        "package": "deepiri-modelkit"
+      }
+    ]
+  },
+  "deepiri-training-orchestrator": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "python",
+        "package": "deepiri-training-orchestrator"
+      },
+      {
+        "repo": "Team-Deepiri/diri-helox",
+        "type": "python",
+        "package": "deepiri-training-orchestrator"
+      }
+    ]
+  },
+  "diri-agent-toolbox": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "python",
+        "package": "diri-agent-toolbox"
+      }
+    ]
+  },
+  "deepiri-gpu-utils": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "python",
+        "package": "deepiri-gpu-utils"
+      },
+      {
+        "repo": "Team-Deepiri/diri-helox",
+        "type": "python",
+        "package": "deepiri-gpu-utils"
+      },
+      {
+        "repo": "Team-Deepiri/deepiri-mudspeed",
+        "type": "python",
+        "package": "deepiri-gpu-utils"
+      }
+    ]
+  },
+  "deepiri-prismpipe": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/diri-cyrex",
+        "type": "python",
+        "package": "deepiri-prismpipe"
+      },
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "platform-services/shared/deepiri-prismpipe"
+      }
+    ]
+  },
+  "diri-cyrex": {
     "dependents": [
       {
         "repo": "Team-Deepiri/deepiri-control-plane",
         "type": "submodule",
-        "path": "deepiri-core-api"
-      },
-      {
-        "repo": "Team-Deepiri/deepiri-platform",
-        "type": "submodule",
-        "path": "deepiri-core-api"
+        "path": "diri-cyrex"
       }
     ]
   },
-  "deepiri-api-gateway": {
+  "diri-helox": {
     "dependents": [
       {
-        "repo": "Team-Deepiri/deepiri-platform",
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "diri-helox"
+      }
+    ]
+  },
+  "deepiri-cp-api-gateway": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
         "type": "submodule",
         "path": "platform-services/backend/deepiri-api-gateway"
-      },
-      {
-        "repo": "Team-Deepiri/deepiri-control-plane",
-        "type": "submodule",
-        "path": "platform-services/backend/deepiri-api-gateway"
       }
     ]
   },
-  "deepiri-web-frontend": {
+  "deepiri-cp-frontend": {
     "dependents": [
-      {
-        "repo": "Team-Deepiri/deepiri-platform",
-        "type": "submodule",
-        "path": "deepiri-web-frontend"
-      },
       {
         "repo": "Team-Deepiri/deepiri-control-plane",
         "type": "submodule",
-        "path": "deepiri-web-frontend"
+        "path": "deepiri-cp-frontend"
       }
     ]
   },
-  "deepiri-external-bridge-service": {
+  "deepiri-cp-external-bridge-service": {
     "dependents": [
-      {
-        "repo": "Team-Deepiri/deepiri-platform",
-        "type": "submodule",
-        "path": "platform-services/backend/deepiri-external-bridge-service"
-      },
       {
         "repo": "Team-Deepiri/deepiri-control-plane",
         "type": "submodule",
@@ -55,13 +190,8 @@
       }
     ]
   },
-  "deepiri-auth-service": {
+  "deepiri-cp-auth-service": {
     "dependents": [
-      {
-        "repo": "Team-Deepiri/deepiri-platform",
-        "type": "submodule",
-        "path": "platform-services/backend/deepiri-auth-service"
-      },
       {
         "repo": "Team-Deepiri/deepiri-control-plane",
         "type": "submodule",
@@ -75,76 +205,133 @@
         "repo": "Team-Deepiri/deepiri-control-plane",
         "type": "submodule",
         "path": "platform-services/backend/deepiri-language-intelligence-service"
-      },
-      {
-        "repo": "Team-Deepiri/deepiri-platform",
-        "type": "submodule",
-        "path": "platform-services/backend/deepiri-language-intelligence-service"
-      }
-    ]
-  },
-  "diri-persola": {
-    "dependents": [
-      {
-        "repo": "Team-Deepiri/deepiri-control-plane",
-        "type": "submodule",
-        "path": "diri-persola"
-      },
-      {
-        "repo": "Team-Deepiri/deepiri-platform",
-        "type": "submodule",
-        "path": "diri-persola"
-      }
-    ]
-  },
-  "deepiri-prismpipe": {
-    "dependents": [
-      {
-        "repo": "Team-Deepiri/deepiri-control-plane",
-        "type": "submodule",
-        "path": "platform-services/shared/deepiri-prismpipe"
-      },
-      {
-        "repo": "Team-Deepiri/deepiri-platform",
-        "type": "submodule",
-        "path": "platform-services/shared/deepiri-prismpipe"
       }
     ]
   },
   "deepiri-shared-utils": {
     "dependents": [
       {
-        "repo": "Team-Deepiri/deepiri-platform",
-        "type": "submodule",
-        "path": "platform-services/shared/deepiri-shared-utils"
-      },
-      {
         "repo": "Team-Deepiri/deepiri-control-plane",
         "type": "submodule",
         "path": "platform-services/shared/deepiri-shared-utils"
-      }
-    ]
-  },
-  "diri-agent-testing-utils": {
-    "dependents": [
-      {
-        "repo": "Team-Deepiri/diri-cyrex",
-        "type": "submodule",
-        "path": "diri-agent-testing-utils"
-      }
-    ]
-  },
-  "deepiri-dataset-processor": {
-    "dependents": [
-      {
-        "repo": "Team-Deepiri/diri-cyrex",
-        "type": "submodule",
-        "path": "deepiri-dataset-processor"
       },
       {
-        "repo": "Team-Deepiri/diri-helox",
+        "repo": "Team-Deepiri/deepiri-platform",
         "type": "submodule",
-        "path": "deepiri-dataset-processor"
+        "path": "platform-services/shared/deepiri-shared-utils"
+      }
+    ]
+  },
+  "deepiri-synapse": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "platform-services/shared/deepiri-synapse"
+      }
+    ]
+  },
+  "deepiri-sugar-glider": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "platform-services/shared/deepiri-sugar-glider"
+      }
+    ]
+  },
+  "deepiri-ollama-utils": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "deepiri-ollama-utils"
+      }
+    ]
+  },
+  "deepiri-suite": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "deepiri-suite"
+      },
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "deepiri-suite"
+      }
+    ]
+  },
+  "deepiri-speech": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "platform-services/backend/deepiri-speech"
+      }
+    ]
+  },
+  "deepiri-elkedel": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-control-plane",
+        "type": "submodule",
+        "path": "deepiri-elkedel"
+      }
+    ]
+  },
+  "deepiri-api-gateway": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "platform-services/backend/deepiri-api-gateway"
+      }
+    ]
+  },
+  "deepiri-web-frontend": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "deepiri-web-frontend"
+      }
+    ]
+  },
+  "deepiri-external-bridge-service": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "platform-services/backend/deepiri-external-bridge-service"
+      }
+    ]
+  },
+  "deepiri-auth-service": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-platform",
+        "type": "submodule",
+        "path": "platform-services/backend/deepiri-auth-service"
+      }
+    ]
+  },
+  "deepiri-zepgpu": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-juggle-box",
+        "type": "python",
+        "package": "deepiri-zepgpu"
+      }
+    ]
+  },
+  "deepiri-mudspeed": {
+    "dependents": [
+      {
+        "repo": "Team-Deepiri/deepiri-juggle-box",
+        "type": "python",
+        "package": "deepiri-mudspeed"
       }
     ]
   }

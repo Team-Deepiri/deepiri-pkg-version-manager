@@ -7,6 +7,13 @@ ORG = "Team-Deepiri"
 CLONE_DIR = "./repos"
 OUTPUT_FILE = "dep-config.json"
 
+# Submodule dependencies are keyed by the actual repo name in each repo's
+# .gitmodules URL. deepiri-control-plane submodules the deepiri-cp-* repos
+# (deepiri-cp-api-gateway, deepiri-cp-auth-service,
+# deepiri-cp-external-bridge-service, deepiri-cp-frontend) for the same service
+# paths that deepiri-platform mounts from the canonical deepiri-* repos, so
+# both repos appear as distinct dependent entries.
+
 dependency_map = {}
 
 
